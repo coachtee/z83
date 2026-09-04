@@ -80,3 +80,23 @@ export interface EmailPackage {
   body: string;
   attachments: { label: string; storageKey: string }[];
 }
+
+export interface EmailDelivery {
+  id: string;
+  applicationId: string;
+  recipient: string;
+  subject: string;
+  body: string;
+  attachments: { label: string; storageKey: string }[];
+  attemptedAt: string;
+  success: boolean;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface SendResult {
+  success: boolean;
+  recipient: string;
+  attemptedAt: string;
+  error?: string;
+}

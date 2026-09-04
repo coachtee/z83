@@ -140,6 +140,11 @@ export const api = {
       `/applications/${id}/print-package`,
       { method: "POST" },
     ),
+  sendApplication: (id: string) =>
+    request<{ success: boolean; recipient: string; attemptedAt: string; error?: string }>(
+      `/applications/${id}/send`,
+      json({ confirm: true }),
+    ),
   updateApplicationStatus: (id: string, status: string) =>
     request<{ application: Application }>(`/applications/${id}/status`, {
       method: "PATCH",

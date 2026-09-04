@@ -304,7 +304,7 @@ actions).
 |---|---|---|
 | id | uuid pk | |
 | application_id | uuid fk → applications | |
-| event_type | text not null | `created` \| `reviewed` \| `signed` \| `email_prepared` \| `print_prepared` \| `status_changed` |
+| event_type | text not null | `created` \| `reviewed` \| `signed` \| `email_prepared` \| `print_prepared` \| `status_changed` \| `email_sent` \| `email_send_failed` |
 | actor_user_id | uuid fk → users, null | |
 | actor_role | text null | |
 | metadata | jsonb null | |
@@ -320,6 +320,23 @@ actions).
 | signed_at | timestamptz not null | |
 | ip_address | inet null | |
 | user_agent | text null | |
+
+### `email_deliveries`
+Every real send attempt (`POST /applications/:id/send`), success or
+failure — the detailed audit record the spec calls for, distinct from the
+higher-level `application_events` row also written for the same attempt.
+
+| column | type | notes |
+|---|---|---|
+| id | uuid pk | |
+| application_id | uuid fk → applications | |
+| recipient | citext not null | |
+| subject | text not null | |
+| body | text not null | |
+| attachments | jsonb not null | `{ label, storageKey }[]`, same shape as `EmailPackage.attachments` |
+| attempted_at | timestamptz not null | |
+| success | boolean not null | |
+| error_message | text null | set when `success` is false |
 
 ## Notifications and system-wide audit
 
@@ -366,5 +383,6 @@ users ─┬─< profiles ─┬─< profile_versions
                           ├─ application_snapshots (1:1)
                           ├─< application_documents
                           ├─< application_events
+                          ├─< email_deliveries
                           └─< signatures
 ```

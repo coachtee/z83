@@ -275,12 +275,22 @@ export async function addSignature(input: {
   };
 }
 
+/**
+ * Regenerating the same file (e.g. /email-package previewed it, then
+ * /send rebuilds it fresh) reuses the same deterministic storage key —
+ * replace that row rather than accumulating duplicates that all point at
+ * the same (overwritten) file.
+ */
 export async function addGeneratedApplicationDocument(input: {
   applicationId: string;
   documentRole: ApplicationDocumentRole;
   storageKey: string;
   orderIndex: number;
 }): Promise<void> {
+  await query(
+    `DELETE FROM application_documents WHERE application_id = $1 AND storage_key = $2`,
+    [input.applicationId, input.storageKey],
+  );
   await query(
     `INSERT INTO application_documents (application_id, document_role, storage_key, order_index)
      VALUES ($1,$2,$3,$4)`,

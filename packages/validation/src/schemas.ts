@@ -105,3 +105,8 @@ export const updateApplicationStatusSchema = z.object({
   status: z.enum(APPLICATION_STATUSES),
 });
 export type UpdateApplicationStatusInput = z.infer<typeof updateApplicationStatusSchema>;
+
+export const confirmSendSchema = z.object({
+  confirm: z.literal(true),
+});
+export type ConfirmSendInput = z.infer<typeof confirmSendSchema>;

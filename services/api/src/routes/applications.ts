@@ -4,10 +4,11 @@ import {
   createApplicationSchema,
   signApplicationSchema,
   updateApplicationStatusSchema,
+  confirmSendSchema,
   checkApplicationReadiness,
   computeMatch,
 } from "@z83/validation";
-import type { Application, EmailPackage } from "@z83/types";
+import type { Application } from "@z83/types";
 import { HttpError, authenticate } from "../auth.js";
 import {
   addApplicationEvent,
@@ -23,11 +24,15 @@ import {
   listApplicationsForUser,
   updateApplicationStatus,
 } from "../repo/applications.js";
+import { listEmailDeliveries, recordEmailDelivery } from "../repo/emailDeliveries.js";
 import { getVacancyById, listRequirements } from "../repo/vacancies.js";
 import { findUserById } from "../repo/users.js";
-import { getDocumentById } from "../repo/documents.js";
+import { buildEmailPackageForApplication } from "../application-packaging.js";
 import { generateApplicationPdf } from "../pdf.js";
+import { buildPrintReadyPackage, type PrintableAttachment } from "../print-package.js";
 import { getStorageProvider } from "../storage.js";
+import { sendEmail } from "../email.js";
+import { getDocumentById } from "../repo/documents.js";
 
 async function loadOwnedApplication(applicationId: string, userId: string): Promise<Application> {
   const application = await getApplicationById(applicationId);
@@ -94,6 +99,12 @@ export function registerApplicationRoutes(app: FastifyInstance): void {
     await loadOwnedApplication(request.params.id, request.authUser!.userId);
     const events = await listApplicationEvents(request.params.id);
     return reply.send({ events });
+  });
+
+  app.get<{ Params: { id: string } }>("/applications/:id/email-deliveries", async (request, reply) => {
+    await loadOwnedApplication(request.params.id, request.authUser!.userId);
+    const deliveries = await listEmailDeliveries(request.params.id);
+    return reply.send({ deliveries });
   });
 
   app.post<{ Params: { id: string } }>("/applications/:id/review", async (request, reply) => {
@@ -181,44 +192,8 @@ export function registerApplicationRoutes(app: FastifyInstance): void {
       );
     }
 
-    const signature = await getLatestSignature(application.id);
-    const signatureBytes = signature
-      ? await getStorageProvider().get(signature.imageStorageKey)
-      : null;
+    const emailPackage = await buildEmailPackageForApplication(application, snapshot, vacancy, user);
 
-    const generatedPdf = await generateApplicationPdf({
-      applicantFullName: user.fullName,
-      snapshot: snapshot.snapshotData,
-      vacancy,
-      signaturePngBytes: signatureBytes,
-    });
-    const generatedKey = `applications/${application.id}/z83-application.pdf`;
-    await getStorageProvider().put(generatedKey, Buffer.from(generatedPdf), "application/pdf");
-
-    const attachments: EmailPackage["attachments"] = [
-      { label: "Z83 Application", storageKey: generatedKey },
-    ];
-    for (const doc of snapshot.snapshotData.documents) {
-      const fullDoc = await getDocumentById(doc.id);
-      if (fullDoc) attachments.push({ label: fullDoc.originalFilename, storageKey: fullDoc.storageKey });
-    }
-
-    const emailPackage: EmailPackage = {
-      recipient: vacancy.submissionEmail,
-      subject: `Application: ${vacancy.jobTitle} (Ref: ${vacancy.referenceNumber})`,
-      body:
-        `Dear Sir/Madam,\n\nPlease find attached my application for the position of ` +
-        `${vacancy.jobTitle} (Reference: ${vacancy.referenceNumber}).\n\n` +
-        `Kind regards,\n${user.fullName}`,
-      attachments,
-    };
-
-    await addGeneratedApplicationDocument({
-      applicationId: application.id,
-      documentRole: "generated_z83",
-      storageKey: generatedKey,
-      orderIndex: 0,
-    });
     await updateApplicationStatus(application.id, "email_prepared");
     await addApplicationEvent({
       applicationId: application.id,
@@ -228,8 +203,88 @@ export function registerApplicationRoutes(app: FastifyInstance): void {
       metadata: { recipient: emailPackage.recipient, subject: emailPackage.subject },
     });
 
-    // Prepared, not sent — see docs/ARCHITECTURE.md#email-preparation-not-sending.
+    // Prepared, not sent — see docs/ARCHITECTURE.md#email-preparation-and-sending.
     return reply.send({ emailPackage, sent: false });
+  });
+
+  app.post<{ Params: { id: string } }>("/applications/:id/send", async (request, reply) => {
+    const parsed = confirmSendSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw new HttpError(
+        400,
+        "CONFIRMATION_REQUIRED",
+        'Sending requires explicit confirmation: { "confirm": true }.',
+      );
+    }
+    const application = await loadOwnedApplication(request.params.id, request.authUser!.userId);
+    if (!["signed", "email_prepared"].includes(application.status)) {
+      throw new HttpError(409, "SIGN_REQUIRED", "Sign the application before sending it.");
+    }
+    const [snapshot, vacancy, user] = await Promise.all([
+      getSnapshot(application.id),
+      getVacancyById(application.vacancyId),
+      findUserById(request.authUser!.userId),
+    ]);
+    if (!snapshot || !vacancy || !user) throw new HttpError(500, "INTERNAL", "Missing application data.");
+    if (!vacancy.submissionEmail) {
+      throw new HttpError(
+        409,
+        "NO_EMAIL_INSTRUCTIONS",
+        "This vacancy doesn't have an email submission address on file.",
+      );
+    }
+
+    // Rebuilt fresh at send time rather than reusing a stale preview — the
+    // attachment list and PDF must reflect this exact moment, not whatever
+    // was true when /email-package last ran.
+    const emailPackage = await buildEmailPackageForApplication(application, snapshot, vacancy, user);
+
+    const attachmentBuffers = await Promise.all(
+      emailPackage.attachments.map(async (attachment) => ({
+        filename: attachment.label,
+        content: await getStorageProvider().get(attachment.storageKey),
+        contentType: "application/octet-stream",
+      })),
+    );
+
+    const outcome = await sendEmail({
+      recipient: emailPackage.recipient,
+      subject: emailPackage.subject,
+      body: emailPackage.body,
+      attachments: attachmentBuffers,
+    });
+
+    const attemptedAt = new Date().toISOString();
+    await recordEmailDelivery({
+      applicationId: application.id,
+      recipient: emailPackage.recipient,
+      subject: emailPackage.subject,
+      body: emailPackage.body,
+      attachments: emailPackage.attachments,
+      success: outcome.success,
+      errorMessage: outcome.error ?? null,
+    });
+    await addApplicationEvent({
+      applicationId: application.id,
+      eventType: outcome.success ? "email_sent" : "email_send_failed",
+      actorUserId: request.authUser!.userId,
+      actorRole: request.authUser!.role,
+      metadata: { recipient: emailPackage.recipient, subject: emailPackage.subject, error: outcome.error },
+    });
+
+    if (outcome.success) {
+      // A genuinely dispatched email is a real submission — unlike
+      // /email-package (preview only), this is the one place allowed to
+      // move status to "submitted" on its own.
+      await updateApplicationStatus(application.id, "submitted");
+    }
+
+    return reply.send({
+      success: outcome.success,
+      recipient: emailPackage.recipient,
+      attemptedAt,
+      error: outcome.error,
+    });
   });
 
   app.post<{ Params: { id: string } }>("/applications/:id/print-package", async (request, reply) => {
@@ -249,14 +304,32 @@ export function registerApplicationRoutes(app: FastifyInstance): void {
       ? await getStorageProvider().get(signature.imageStorageKey)
       : null;
 
-    const generatedPdf = await generateApplicationPdf({
+    const z83Pdf = await generateApplicationPdf({
       applicantFullName: user.fullName,
       snapshot: snapshot.snapshotData,
       vacancy,
       signaturePngBytes: signatureBytes,
     });
+
+    const attachments: PrintableAttachment[] = [];
+    for (const doc of snapshot.snapshotData.documents) {
+      const fullDoc = await getDocumentById(doc.id);
+      if (!fullDoc) continue;
+      const bytes = await getStorageProvider().get(fullDoc.storageKey);
+      attachments.push({
+        documentTypeCode: fullDoc.documentTypeCode,
+        originalFilename: fullDoc.originalFilename,
+        mimeType: fullDoc.mimeType,
+        bytes,
+      });
+    }
+
+    // One combined, print-ready PDF: the Z83 summary followed by every
+    // uploaded document (ID, certificates, CV, ...) in submission order —
+    // not just a summary that lists their names. See print-package.ts.
+    const combinedPdf = await buildPrintReadyPackage(z83Pdf, attachments);
     const generatedKey = `applications/${application.id}/z83-print-package.pdf`;
-    await getStorageProvider().put(generatedKey, Buffer.from(generatedPdf), "application/pdf");
+    await getStorageProvider().put(generatedKey, Buffer.from(combinedPdf), "application/pdf");
 
     await addGeneratedApplicationDocument({
       applicationId: application.id,

@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,24 +23,29 @@ import kotlinx.coroutines.launch
 import za.co.naleli.z83.app.network.ApiClient
 
 @Composable
-fun LoginScreen(apiClient: ApiClient, onLoggedIn: () -> Unit, onGoToRegister: () -> Unit = {}) {
+fun RegisterScreen(apiClient: ApiClient, onRegistered: () -> Unit, onGoToLogin: () -> Unit) {
+    var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(false) }
+    var submitting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("Z83", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
-        Text("Fill once. Apply many times.")
+        Text("Create your Z83 profile", style = MaterialTheme.typography.headlineSmall)
+        Text("Free. Takes about two minutes to get started.")
 
-        androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(top = 24.dp))
+        androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(top = 16.dp))
 
+        OutlinedTextField(
+            value = fullName,
+            onValueChange = { fullName = it },
+            label = { Text("Full name") },
+            modifier = Modifier.fillMaxWidth(),
+        )
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
@@ -55,33 +60,31 @@ fun LoginScreen(apiClient: ApiClient, onLoggedIn: () -> Unit, onGoToRegister: ()
             modifier = Modifier.fillMaxWidth(),
         )
 
-        error?.let {
-            Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.error)
-        }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
         Button(
+            enabled = !submitting,
             onClick = {
-                loading = true
+                submitting = true
                 error = null
                 scope.launch {
                     try {
-                        apiClient.login(email, password)
-                        onLoggedIn()
+                        apiClient.register(email, password, fullName)
+                        onRegistered()
                     } catch (e: ApiClient.ApiException) {
                         error = e.message
                     } finally {
-                        loading = false
+                        submitting = false
                     }
                 }
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            if (loading) CircularProgressIndicator(modifier = Modifier.padding(4.dp))
-            else Text("Sign in")
+            Text(if (submitting) "Creating account…" else "Create account")
         }
 
-        TextButton(onClick = onGoToRegister, modifier = Modifier.fillMaxWidth()) {
-            Text("No profile yet? Create one")
+        TextButton(onClick = onGoToLogin, modifier = Modifier.fillMaxWidth()) {
+            Text("Already have a profile? Sign in")
         }
     }
 }

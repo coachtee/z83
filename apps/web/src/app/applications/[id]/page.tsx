@@ -49,6 +49,11 @@ export default function ApplicationDetailPage({
   const [review, setReview] = useState<ValidationReport | null>(null);
   const [emailPackage, setEmailPackage] = useState<EmailPackage | null>(null);
   const [printUrl, setPrintUrl] = useState<string | null>(null);
+  const [sendResult, setSendResult] = useState<{
+    success: boolean;
+    recipient: string;
+    error?: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -239,10 +244,33 @@ export default function ApplicationDetailPage({
               {emailPackage && (
                 <Alert>
                   <AlertTitle>Email prepared — not sent yet</AlertTitle>
-                  <AlertDescription className="space-y-1">
+                  <AlertDescription className="space-y-2">
                     <p>To: {emailPackage.recipient}</p>
                     <p>Subject: {emailPackage.subject}</p>
-                    <p>{emailPackage.attachments.length} attachment(s). Send it from your own email app.</p>
+                    <p>{emailPackage.attachments.length} attachment(s).</p>
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        runAction(async () => {
+                          const res = await api.sendApplication(id);
+                          setSendResult(res);
+                          await refresh();
+                        })
+                      }
+                    >
+                      Send application
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {sendResult && (
+                <Alert variant={sendResult.success ? "success" : "destructive"}>
+                  <AlertTitle>{sendResult.success ? "Sent" : "Sending failed"}</AlertTitle>
+                  <AlertDescription>
+                    {sendResult.success
+                      ? `Sent to ${sendResult.recipient}.`
+                      : `${sendResult.error ?? "Unknown error."} Nothing was submitted — try again.`}
                   </AlertDescription>
                 </Alert>
               )}
@@ -258,7 +286,7 @@ export default function ApplicationDetailPage({
                 </Alert>
               )}
 
-              {(status === "email_prepared" || status === "print_prepared") && (
+              {status === "print_prepared" && (
                 <Button
                   disabled={busy}
                   onClick={() =>
@@ -268,7 +296,7 @@ export default function ApplicationDetailPage({
                     })
                   }
                 >
-                  I&apos;ve sent / delivered this — mark as submitted
+                  I&apos;ve delivered this — mark as submitted
                 </Button>
               )}
             </CardContent>

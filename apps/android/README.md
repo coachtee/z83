@@ -5,44 +5,69 @@ Native Kotlin + Jetpack Compose. Not a WebView — this talks to the same
 
 ## Modules
 
-- **`:shared`** — pure Kotlin/JVM, no Android dependency. Data classes
-  mirroring `packages/types` (`Vacancy`, `Profile`, `MatchResult`,
-  `Application`, …), `kotlinx.serialization`-annotated so they decode
-  `services/api` responses directly.
+- **`:shared`** — pure Kotlin/JVM, no Android dependency. Data classes and
+  request bodies mirroring `packages/types` / `packages/validation`'s
+  schemas (`Vacancy`, `Profile`, `MatchResult`, `Application`,
+  `ProfileUpdateRequest`, …), `kotlinx.serialization`-annotated so they
+  decode/encode against `services/api` directly.
 - **`:app`** — the Android application module: Compose UI, navigation,
   and an OkHttp-based `ApiClient`.
+
+## The applicant journey this covers
+
+Login/register → Home → Profile (personal particulars, qualifications,
+work experience, references, documents, all as sections of one screen —
+mirroring `apps/web`'s profile page rather than splitting into a maze of
+sub-screens) → Vacancies (with match %) → Vacancy detail ("why this
+matches," matched/missing/unknown requirements) → Apply → review → sign
+(drawn on a Compose canvas) → prepare + send email, or prepare a
+print-ready package and mark hand-delivered → My Applications.
+
+Every screen is a thin view over the same server-side logic the web app
+uses — matching, validation, and snapshotting all happen in `services/api`,
+never re-implemented here.
+
+## Local dev networking
+
+`ApiClient` defaults to `http://10.0.2.2:4000` (the Android emulator's
+alias for the host machine running `services/api` in dev). Cleartext HTTP
+is normally blocked on Android 9+; `res/xml/network_security_config.xml`
+opens a narrow exception for `10.0.2.2` and `localhost` only — everything
+else stays HTTPS-only. Point `ApiClient` at a real `https://` URL for
+anything beyond local development; don't widen the cleartext exception to
+do it.
 
 ## What's actually verified here
 
 This sandbox has no Android SDK, and `dl.google.com` (Google's Maven
 repository, needed for the Android Gradle Plugin, AndroidX, and Compose
-artifacts) is blocked by the environment's network policy — confirmed with
-a direct `curl`, not assumed. That means:
+artifacts) is confirmed blocked by the environment's network policy
+(direct `curl` test, not assumed). That means:
 
 - **`:shared` builds and its tests pass for real** in this environment:
   `./gradlew :shared:test --configure-on-demand`. Run without
   `--configure-on-demand` and Gradle will also try to configure `:app`,
   which needs the Android plugin.
-- **`:app` has not been compiled or run here.** Its Kotlin/Compose source
-  is written the same way any Android engineer would write it, but it is
-  unverified in this sandbox specifically because the plugin repository is
-  unreachable, not because it was skipped for convenience. Build it on a
-  machine with normal internet access and an Android SDK
-  (`compileSdk = 35`, `minSdk = 26`):
+- **`:app` has not been compiled, built, or run here.** Its Kotlin/Compose
+  source is written the same way any Android engineer would write it —
+  reviewed carefully by hand for the mistakes a compiler would normally
+  catch — but it is genuinely unverified in this sandbox specifically
+  because the plugin repository is unreachable, not skipped for
+  convenience. **On a machine with normal internet access and an Android
+  SDK** (`compileSdk = 35`, `minSdk = 26`, JDK 17+):
 
   ```
-  ./gradlew :app:assembleDebug
+  ./gradlew :app:assembleDebug   # build the debug APK
+  ./gradlew :app:testDebugUnitTest
+  ./gradlew :app:lintDebug
   ```
 
-## Scope of this vertical slice
-
-Per `docs/VERTICAL-SLICE.md`, Android is intentionally read-only for now:
-sign in, browse published vacancies, open one and see the match breakdown
-(matched / missing / unknown requirements, same advisory wording as the
-web app — "appears to match," never "eligible"). Profile editing,
-document upload, applying, and signing are web-first; porting those
-screens is follow-up work once the API contract is stable, not part of
-this slice.
+  Then install on an emulator or device (`adb install app/build/outputs/apk/debug/app-debug.apk`,
+  or `./gradlew :app:installDebug` with a device/emulator already running)
+  and walk the applicant journey above by hand. If testing against
+  `services/api` on the same machine from a physical device rather than an
+  emulator, use `adb reverse tcp:4000 tcp:4000` and point `ApiClient` at
+  `http://localhost:4000` instead of `10.0.2.2`.
 
 ## Why a separate `:shared` module instead of one Android app module
 

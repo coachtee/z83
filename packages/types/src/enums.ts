@@ -68,6 +68,8 @@ export const APPLICATION_EVENT_TYPES = [
   "email_prepared",
   "print_prepared",
   "status_changed",
+  "email_sent",
+  "email_send_failed",
 ] as const;
 export type ApplicationEventType = (typeof APPLICATION_EVENT_TYPES)[number];
 

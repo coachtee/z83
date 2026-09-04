@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -13,14 +14,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import za.co.naleli.z83.app.network.ApiClient
 
 @Composable
-fun VacancyDetailScreen(apiClient: ApiClient, vacancyId: String) {
+fun VacancyDetailScreen(apiClient: ApiClient, vacancyId: String, onApplied: (String) -> Unit) {
     var detail by remember { mutableStateOf<ApiClient.VacancyDetail?>(null) }
+    var applying by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(vacancyId) {
         detail = apiClient.getVacancy(vacancyId)
@@ -62,6 +68,30 @@ fun VacancyDetailScreen(apiClient: ApiClient, vacancyId: String) {
         }
         items(current.requirements) { requirement ->
             Text("• ${requirement.description}")
+        }
+
+        item {
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            Button(
+                enabled = !applying,
+                onClick = {
+                    applying = true
+                    error = null
+                    scope.launch {
+                        try {
+                            val application = apiClient.createApplication(vacancyId)
+                            onApplied(application.id)
+                        } catch (e: ApiClient.ApiException) {
+                            error = e.message
+                        } finally {
+                            applying = false
+                        }
+                    }
+                },
+                modifier = Modifier.padding(top = 16.dp),
+            ) {
+                Text(if (applying) "Preparing…" else "Apply")
+            }
         }
     }
 }

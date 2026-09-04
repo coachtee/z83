@@ -133,17 +133,40 @@ PDF generation (`services/api/src/pdf`) uses `pdf-lib`. Two paths exist:
   experience, declaration) so a reviewer can read straight off it, but it is
   not presented as a facsimile of the official form.
 
-The print package orders attachments per the vacancy's own submission
-instructions (`vacancy_requirements` / `submission instructions` data), not
-a hardcoded order.
+`POST /applications/:id/print-package` (`src/print-package.ts`) produces one
+combined, print-ready PDF — the Z83 summary followed by the applicant's own
+uploaded documents actually merged in, not just listed by name. PDFs are
+merged page-for-page; images (JPEG/PNG scans) become a full page each; a
+file type that can't be embedded gets a placeholder page saying so instead
+of silently vanishing from the package. Document order follows the
+conventional South African public-service submission order — Z83, ID,
+qualifications, CV, then everything else — since no vacancy in this dataset
+has specified its own explicit ordering; a vacancy that does should override
+this default (not implemented yet).
 
-## Email preparation, not sending
+## Email preparation and sending
 
-`services/api` prepares recipient, subject, body, and attachment list and
-stores that as the application's email package. It does not hold SMTP
-credentials in this phase and does not send mail. The UI and API responses
-must never say an email "was sent" — only "prepared," until real dispatch is
-implemented and explicitly confirmed by the user at send time.
+`POST /applications/:id/email-package` prepares recipient, subject, body,
+and attachment list and stores that as a preview — it never sends anything,
+and the UI never says an email "was sent" from this step, only "prepared."
+
+Actually sending is a separate, explicit action:
+`POST /applications/:id/send` requires `{ "confirm": true }` in the body —
+the applicant must take a distinct, deliberate action, never a byproduct of
+preparing the preview. It dispatches over real SMTP (`src/email.ts`,
+`nodemailer`), configured via `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`/
+`SMTP_FROM`. If `SMTP_HOST` isn't set, the endpoint reports the attempt as
+failed with "not configured" rather than pretending to succeed.
+
+Every attempt — success or failure — is recorded twice: an `email_deliveries`
+row (recipient, subject, body, attachments, timestamp, success, error) for
+the detailed audit record, and an `email_sent` / `email_send_failed`
+`application_events` row for the application's own timeline. Only a
+successful send moves the application to `submitted`; a failure changes
+nothing about its status and surfaces the error to the caller. Preparing a
+package (`/email-package`) never sets `submitted` on its own — only a real,
+confirmed, successful dispatch does, or a hand-delivery applicant marking it
+submitted themselves via `PATCH .../status`.
 
 ## Assisted (internet café) sessions
 

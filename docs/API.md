@@ -104,13 +104,18 @@ user-facing strings for match results — routes cannot construct their own.
 | POST | `/applications/:id/review` | runs Z83 completeness/validation rules against the **snapshot** (not the live profile); returns pass/fail per rule; does not change status on failure |
 | POST | `/applications/:id/sign` | `{ imageBase64 }`. Requires review to have passed. Stores `signatures` row, sets status `signed`, writes `application_events` |
 | POST | `/applications/:id/email-package` | Requires status `signed`. Builds `{ recipient, subject, body, attachments[] }` from the vacancy's submission instructions and the snapshot's documents, in the vacancy's specified order. Sets status `email_prepared`. **Does not send anything.** |
-| POST | `/applications/:id/print-package` | Requires status `signed`. Generates the print-ready PDF (template-filled Z83 if a template is loaded, else the structured fallback), stores it, adds it to `application_documents`. Sets status `print_prepared`. |
-| PATCH | `/applications/:id/status` | `{ status }`. Applicant-facing transition to `submitted` (self-reported: "I emailed/delivered this") or `closed`. |
+| POST | `/applications/:id/send` | Requires status `signed` or `email_prepared`, and `{ "confirm": true }` in the body — no confirmation, no send. Rebuilds the package fresh (never reuses a stale preview) and dispatches it over real SMTP (`src/email.ts`). Records an `email_deliveries` row and an `email_sent`/`email_send_failed` event **on every attempt, success or failure**. Only a successful send moves status to `submitted` — a failed one leaves status untouched and returns the error in the response so the UI can show it, never silently. If `SMTP_HOST` isn't configured, responds with `{ success: false, error: "Email sending is not configured on this server." }` rather than pretending to send. |
+| GET | `/applications/:id/email-deliveries` | Every dispatch attempt for this application — recipient, subject, attachments, timestamp, success/failure, error if any. |
+| POST | `/applications/:id/print-package` | Requires status `signed`. Generates the Z83 PDF (template-filled if a template is loaded, else the structured fallback) and merges the applicant's own uploaded documents into it — ID, certificates, CV, in submission order — as one combined, print-ready PDF (`src/print-package.ts`). Stores it, adds it to `application_documents`. Sets status `print_prepared`. |
+| PATCH | `/applications/:id/status` | `{ status }`. Applicant-facing transition to `submitted` (self-reported: "I hand-delivered this" — the counterpart to `/send`'s automatic transition for a real email dispatch) or `closed`. |
 | GET | `/applications/:id/events` | audit trail for this application |
 
 Status machine: `draft → reviewed → signed → (email_prepared | print_prepared) → submitted → closed`.
 `review` can be re-run any number of times before `signed`; nothing before
-`signed` is final.
+`signed` is final. `submitted` is reached two ways: automatically, the
+moment `/send` actually dispatches an email successfully, or manually via
+`PATCH .../status` after a hand delivery — never merely from `/email-package`
+or `/print-package` preparing something.
 
 ## Admin — circular ingestion (manual upload path: v1; automatic collection: designed)
 
