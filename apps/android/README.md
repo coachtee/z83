@@ -48,6 +48,19 @@ artifacts) is confirmed blocked by the environment's network policy
   `./gradlew :shared:test --configure-on-demand`. Run without
   `--configure-on-demand` and Gradle will also try to configure `:app`,
   which needs the Android plugin.
+
+  `:shared/build.gradle.kts` sets its Kotlin/Java target via
+  `compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }` plus a matching
+  `java { sourceCompatibility/targetCompatibility = VERSION_17 }`,
+  rather than `kotlin { jvmToolchain(N) }`. `jvmToolchain(N)` makes
+  Gradle *search for or auto-provision* a JDK of that exact version —
+  with no toolchain resolver plugin configured (none is here), that
+  fails outright on any machine that doesn't happen to have precisely
+  that JDK installed, which is what a real Windows build hit (first
+  `languageVersion=21` not found, then `=17` not found after a
+  same-shaped guess). Setting the target directly compiles fine under
+  *any* JDK 17+ already running Gradle — confirmed here by rebuilding
+  with `--configure-on-demand` under this sandbox's JDK 21.
 - **`:app` has not been compiled, built, or run here.** Its Kotlin/Compose
   source is written the same way any Android engineer would write it —
   reviewed carefully by hand for the mistakes a compiler would normally
@@ -58,15 +71,15 @@ artifacts) is confirmed blocked by the environment's network policy
   plugin, and the version must match the Kotlin version exactly. This was
   reported failing on a real Windows build (`Starting in Kotlin 2.0, the
   Compose Compiler Gradle plugin is required when compose is enabled`)
-  and fixed here, but re-running `:app:assembleDebug` in this sandbox
-  still fails at the earlier, unrelated `com.android.application` plugin
+  and fixed here. Re-running `:app:assembleDebug` in this sandbox
+  confirms both fixes don't regress anything reachable here, but still
+  fails at the earlier, unrelated `com.android.application` plugin
   resolution step (the `dl.google.com` block above) before Gradle ever
-  gets far enough to re-resolve the Compose compiler plugin — so this fix
-  is unverified end-to-end here too, and should be confirmed by an actual
-  build on a machine with SDK/network access next.
-  because the plugin repository is unreachable, not skipped for
-  convenience. **On a machine with normal internet access and an Android
-  SDK** (`compileSdk = 35`, `minSdk = 26`, JDK 17+):
+  gets far enough to build `:app` itself — so `:app` remains unverified
+  end-to-end here, and should be confirmed by an actual build on a
+  machine with SDK/network access next. **On a machine with normal
+  internet access and an Android SDK** (`compileSdk = 35`, `minSdk = 26`,
+  JDK 17+):
 
   ```
   ./gradlew :app:assembleDebug   # build the debug APK
