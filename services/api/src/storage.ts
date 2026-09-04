@@ -61,7 +61,7 @@ export class LocalDiskStorageProvider implements StorageProvider {
 }
 
 export function signLocalStorageToken(key: string, expiresAt: number): string {
-  return createHmac("sha256", config.jwtSecret)
+  return createHmac("sha256", config.storageSigningSecret)
     .update(`${key}:${expiresAt}`)
     .digest("hex");
 }

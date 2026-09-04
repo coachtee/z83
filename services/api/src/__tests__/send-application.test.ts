@@ -304,6 +304,30 @@ describe("POST /applications/:id/send", () => {
     expect(generatedDocs).toHaveLength(1);
   });
 
+  it("never lets an applicant self-report 'submitted' straight from a prepared email — only a real /send does", async () => {
+    delete process.env.SMTP_HOST;
+    const { authed, applicationId } = await buildSignedApplication(app);
+
+    const prepared = await app.inject({
+      method: "POST",
+      url: `/applications/${applicationId}/email-package`,
+      ...authed,
+    });
+    expect(prepared.statusCode).toBe(200);
+
+    const fakeSubmit = await app.inject({
+      method: "PATCH",
+      url: `/applications/${applicationId}/status`,
+      ...authed,
+      payload: { status: "submitted" },
+    });
+    expect(fakeSubmit.statusCode).toBe(409);
+    expect(fakeSubmit.json().error.code).toBe("INVALID_TRANSITION");
+
+    const detail = await app.inject({ method: "GET", url: `/applications/${applicationId}`, ...authed });
+    expect(detail.json().application.status).toBe("email_prepared");
+  });
+
   it("refuses to send when the vacancy has no email submission instructions", async () => {
     delete process.env.SMTP_HOST;
     const { authed, applicationId } = await buildSignedApplication(app, { submissionEmail: null });

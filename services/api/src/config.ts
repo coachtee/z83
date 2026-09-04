@@ -21,10 +21,16 @@ function readSmtpConfig() {
   };
 }
 
+const jwtSecret = required("JWT_SECRET");
+
 export const config = {
   port: Number(process.env.API_PORT ?? 4000),
   databaseUrl: required("DATABASE_URL"),
-  jwtSecret: required("JWT_SECRET"),
+  jwtSecret,
+  /** Signs local-storage download URLs (see src/storage.ts). Separate from
+   * jwtSecret so a leak of one doesn't also forge the other; falls back to
+   * jwtSecret only so dev setups without the extra var still work. */
+  storageSigningSecret: process.env.STORAGE_SIGNING_SECRET ?? jwtSecret,
   sessionCookieName: process.env.SESSION_COOKIE_NAME ?? "z83_session",
   storageDriver: (process.env.STORAGE_DRIVER ?? "local") as "local" | "supabase" | "r2",
   storageLocalRoot: process.env.STORAGE_LOCAL_ROOT ?? "./storage-dev",

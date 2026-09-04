@@ -15,6 +15,15 @@ import { getStorageProvider, verifyLocalStorageToken } from "../storage.js";
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
 const APPLICANT_PRE_HANDLERS = [authenticate, attachActingContext];
 
+// Every document here is a scan or PDF of a real ID/certificate — there's
+// no legitimate reason to accept anything else, and rejecting other types
+// (HTML, SVG, executables) closes off stored-content attacks via upload.
+const ALLOWED_UPLOAD_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+]);
+
 export function registerDocumentRoutes(app: FastifyInstance): void {
   app.get(
     "/documents",
@@ -38,6 +47,13 @@ export function registerDocumentRoutes(app: FastifyInstance): void {
         : undefined;
       if (!documentTypeCode || !DOCUMENT_TYPE_CODES.includes(documentTypeCode as DocumentTypeCode)) {
         throw new HttpError(400, "VALIDATION_ERROR", "documentTypeCode is required and must be valid.");
+      }
+      if (!ALLOWED_UPLOAD_MIME_TYPES.has(file.mimetype)) {
+        throw new HttpError(
+          400,
+          "UNSUPPORTED_FILE_TYPE",
+          "Only PDF, JPEG and PNG files can be uploaded.",
+        );
       }
 
       const ctx = request.actingContext!;
@@ -118,7 +134,14 @@ export function registerDocumentRoutes(app: FastifyInstance): void {
         throw new HttpError(403, "INVALID_OR_EXPIRED_LINK", "This link is invalid or has expired.");
       }
       const buffer = await getStorageProvider().get(key);
-      return reply.type("application/octet-stream").send(buffer);
+      // Always a forced, generic-typed download — never rendered inline —
+      // so an uploaded file can't be sniffed as HTML/SVG and executed in
+      // this origin even if some future path let an unexpected type in.
+      return reply
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Content-Disposition", "attachment")
+        .type("application/octet-stream")
+        .send(buffer);
     },
   );
 }

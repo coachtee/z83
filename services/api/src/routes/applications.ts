@@ -42,11 +42,17 @@ async function loadOwnedApplication(applicationId: string, userId: string): Prom
   return application;
 }
 
+// "submitted" is reachable manually only from print_prepared — that's the
+// applicant self-reporting a real hand delivery. From email_prepared it
+// must never be self-reported this way: only a genuinely dispatched
+// /applications/:id/send can move an email-track application to
+// submitted, so there's always a matching email_deliveries row and event
+// behind that status. See docs/ARCHITECTURE.md#email-preparation-and-sending.
 const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
   draft: ["closed"],
   reviewed: ["closed"],
   signed: ["closed"],
-  email_prepared: ["submitted", "closed"],
+  email_prepared: ["closed"],
   print_prepared: ["submitted", "closed"],
   submitted: ["closed"],
 };
