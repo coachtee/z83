@@ -63,15 +63,19 @@ Extends a `users` row with which café they work for.
 
 ### `assisted_sessions`
 An explicit, bounded window where café staff act alongside an applicant.
-Nothing outside an open session gives staff access to applicant data.
+Staff opening a session grants nothing by itself — it starts `pending` and
+only becomes `open` once the applicant authorizes it themselves (their own
+password, entered on the shared device). Nothing outside an `open` session
+gives staff access to applicant data.
 
 | column | type | notes |
 |---|---|---|
 | id | uuid pk | |
 | cafe_staff_id | uuid fk → cafe_staff | |
 | applicant_user_id | uuid fk → users | |
-| status | text not null | `open` \| `closed` |
-| opened_at | timestamptz not null | |
+| status | text not null | `pending` \| `open` \| `closed`, default `pending` |
+| opened_at | timestamptz not null | when staff started the session |
+| authorized_at | timestamptz null | when the applicant confirmed it — null until then |
 | closed_at | timestamptz null | |
 | opened_reason | text null | e.g. "walk-in, needs profile setup" |
 

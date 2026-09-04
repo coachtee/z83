@@ -18,8 +18,9 @@ interface SessionRow {
   id: string;
   cafe_staff_id: string;
   applicant_user_id: string;
-  status: "open" | "closed";
+  status: "pending" | "open" | "closed";
   opened_at: string;
+  authorized_at: string | null;
   closed_at: string | null;
   opened_reason: string | null;
 }
@@ -31,11 +32,14 @@ function mapSession(row: SessionRow): AssistedSession {
     applicantUserId: row.applicant_user_id,
     status: row.status,
     openedAt: row.opened_at,
+    authorizedAt: row.authorized_at,
     closedAt: row.closed_at,
     openedReason: row.opened_reason,
   };
 }
 
+/** Staff starts a session — this alone grants no access. It stays
+ * 'pending' until the applicant authorizes it themselves. */
 export async function openAssistedSession(input: {
   cafeStaffId: string;
   applicantUserId: string;
@@ -57,10 +61,22 @@ export async function getSessionById(id: string): Promise<AssistedSession | null
   return row ? mapSession(row) : null;
 }
 
+/** The applicant's own explicit consent — the only thing that turns a
+ * pending session into one staff can actually act within. */
+export async function authorizeAssistedSession(id: string): Promise<AssistedSession | null> {
+  const { rows } = await query<SessionRow>(
+    `UPDATE assisted_sessions SET status = 'open', authorized_at = now()
+     WHERE id = $1 AND status = 'pending' RETURNING *`,
+    [id],
+  );
+  const row = rows[0];
+  return row ? mapSession(row) : null;
+}
+
 export async function closeAssistedSession(id: string): Promise<AssistedSession | null> {
   const { rows } = await query<SessionRow>(
     `UPDATE assisted_sessions SET status = 'closed', closed_at = now()
-     WHERE id = $1 AND status = 'open' RETURNING *`,
+     WHERE id = $1 AND status IN ('pending', 'open') RETURNING *`,
     [id],
   );
   const row = rows[0];

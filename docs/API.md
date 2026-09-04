@@ -130,17 +130,28 @@ See `docs/CIRCULAR-INGESTION.md` for the pipeline this drives.
 | PATCH | `/admin/vacancies/:id/verify` | `{ approve: boolean, edits?: {...} }`. Approve → `published`; reject → `rejected`. Requires `admin_users`. | v1 |
 | POST | `/admin/circulars/collect` | trigger the scheduled automatic collector on demand | designed |
 
-## Café assisted sessions — v1 (core open/close), designed (full staff-assist UI)
+## Café assisted sessions — v1
+
+All routes require `cafe_staff`. A session starts `pending` — opening one
+grants staff nothing by itself. It only becomes `open` (staff can act on the
+applicant's profile/documents) once the applicant authorizes it themselves.
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/cafe/sessions` | `{ applicantEmail }`. Requires `cafe_staff`. Opens a session; if the applicant doesn't exist, creates the `users` row first. |
-| POST | `/cafe/sessions/:id/close` | closes it; staff loses access to that applicant immediately after |
-| GET | `/cafe/sessions/:id` | session state, staff-only, only while open |
+| GET | `/cafe/applicants?email=` | `{ exists: boolean }` — whether an applicant account already exists for this email, so staff know whether to collect a new password or ask the applicant to authorize with their existing one. |
+| POST | `/cafe/sessions` | `{ applicantEmail, newApplicantPassword?, openedReason? }`. If the email has no account yet, `newApplicantPassword` is required — the applicant chooses it themselves at the keyboard, which is what lets that session start already-`open` (there's no prior account to protect). If the account already exists, the session starts `pending` and `newApplicantPassword` is ignored. |
+| POST | `/cafe/sessions/:id/authorize` | `{ password }`. The applicant's own password, checked against their own account. The only way a `pending` session becomes `open`. |
+| POST | `/cafe/sessions/:id/close` | Closes it (from `pending` or `open`); staff loses access to that applicant immediately after. |
+| GET | `/cafe/sessions/:id` | Session state, staff-only, while `pending` or `open` (not after close). |
 
-While a session is open, staff calls to profile/document/application routes
-for that applicant carry the session id and are recorded in `audit_logs`
-against both the staff member and the applicant.
+Once a session is `open`, staff calls to `/profile*` and `/documents*`
+routes carry an `X-Assisted-Session-Id` header naming it. The API resolves
+the *effective* user (the applicant, from the session) separately from the
+*actor* (the staff member, from their own login) — every such write is
+recorded in `audit_logs` against both. Applying, reviewing, and signing are
+deliberately **not** assistable this way: those require the applicant's own
+authenticated session, never staff acting on their behalf, since a
+signature and a submission decision have to be the applicant's own act.
 
 ## Account — designed
 

@@ -56,6 +56,17 @@ export async function findUserByEmail(
   return row ? mapUser(row) : null;
 }
 
+export async function findUserByIdWithPasswordHash(
+  id: string,
+): Promise<(User & { passwordHash: string }) | null> {
+  const { rows } = await query<UserRow>(
+    `SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL`,
+    [id],
+  );
+  const row = rows[0];
+  return row ? mapUser(row) : null;
+}
+
 export async function findUserById(id: string): Promise<User | null> {
   const { rows } = await query<UserRow>(
     `SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL`,

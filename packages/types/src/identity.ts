@@ -36,8 +36,9 @@ export interface AssistedSession {
   id: string;
   cafeStaffId: string;
   applicantUserId: string;
-  status: "open" | "closed";
+  status: "pending" | "open" | "closed";
   openedAt: string;
+  authorizedAt: string | null;
   closedAt: string | null;
   openedReason: string | null;
 }

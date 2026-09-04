@@ -76,5 +76,5 @@ export type ApplicationEventType = (typeof APPLICATION_EVENT_TYPES)[number];
 export const LANGUAGE_PROFICIENCY_LEVELS = ["poor", "fair", "good"] as const;
 export type LanguageProficiencyLevel = (typeof LANGUAGE_PROFICIENCY_LEVELS)[number];
 
-export const ASSISTED_SESSION_STATUSES = ["open", "closed"] as const;
+export const ASSISTED_SESSION_STATUSES = ["pending", "open", "closed"] as const;
 export type AssistedSessionStatus = (typeof ASSISTED_SESSION_STATUSES)[number];

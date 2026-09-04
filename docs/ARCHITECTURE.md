@@ -173,13 +173,30 @@ submitted themselves via `PATCH .../status`.
 `assisted_sessions` records a café staff member operating alongside an
 applicant. Rules enforced in `services/api`:
 
-- A session must be explicitly opened (applicant present, staff identified)
-  and explicitly closed.
-- While open, staff actions on the applicant's profile/documents/application
-  are permitted and are attributed to both the applicant and the staff
-  member in `audit_logs`.
-- Once closed, staff lose access to that applicant's data. There is no
-  standing staff-to-applicant link.
+- Opening a session (staff identifies the applicant, `POST /cafe/sessions`)
+  grants nothing by itself — it starts `pending`. Staff having *asked* for
+  access is not the same as the applicant *granting* it.
+- The applicant grants it themselves: their own password, typed on the
+  shared device (`POST /cafe/sessions/:id/authorize`), moves the session to
+  `open`. For a first-time walk-in with no account yet, choosing their own
+  password *while creating the account* is that same act of consent, so
+  that session starts `open` immediately — there's nothing pre-existing to
+  protect.
+- Only while `open` can staff act on the applicant's profile and documents,
+  via `src/assisted-context.ts`'s `resolveActingContext`: routes resolve an
+  *effective* user (whoever the session says, i.e. the applicant) separately
+  from the *actor* (the logged-in staff member), and both go into
+  `audit_logs` for every write.
+- Applying, reviewing, and signing are **not** assistable this way on
+  purpose — those routes never consult an assisted session. A signature and
+  the decision to submit have to be the applicant's own authenticated
+  action; the café workflow ends at "profile and documents are ready,"
+  after which the applicant reviews and signs themselves (on the shared
+  device, logged in as themselves, or by taking it from there on their own
+  phone).
+- Closing the session (`POST /cafe/sessions/:id/close`, from either
+  `pending` or `open`) ends staff access immediately. There is no standing
+  staff-to-applicant link outside an open, authorized session.
 - `cafe_accounts` / `cafe_staff` are separate from `admin_users` — café
   staff have no administrative capability.
 
