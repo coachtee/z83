@@ -1,0 +1,30 @@
+node_modules/
+.pnpm-store/
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+.DS_Store
+npm-debug.log*
+pnpm-debug.log*
+coverage/
+storage-dev/
+.turbo/
+
+# Agent/session tooling installed via `skills add` — not part of the product.
+/.agents/
+/.claude/
+/skills-lock.json
+
+# Android
+apps/android/.gradle/
+apps/android/build/
+apps/android/*/build/
+apps/android/local.properties
+apps/android/.idea/
+apps/android/*.iml
+apps/android/captures/

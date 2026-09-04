@@ -1,0 +1,207 @@
+# Z83 — Architecture
+
+## Repository layout
+
+```
+/apps/web                 Next.js app (applicant + café + admin UI)
+/apps/android              Kotlin/Compose native Android app
+/services/api              REST API — the only thing that talks to Postgres directly
+/services/circular-engine  Vacancy circular ingestion pipeline
+/packages/types            Shared TypeScript types/DTOs
+/packages/validation       Shared Zod schemas, Z83 validation rules, matching logic
+/database                  SQL migrations and seed data
+/docs                      This folder
+```
+
+This is a pnpm workspace, not a build-system-heavy monorepo (no Turborepo /
+Nx yet) — there are five packages, that doesn't need one. Add one when build
+times or task orchestration actually justify it.
+
+## Why a separate `services/api` instead of Next.js API routes
+
+Two clients need the same backend: the web app and the native Android app.
+Putting business logic in Next.js route handlers would tie it to one client
+and make the Android app either duplicate the logic in Kotlin or go through
+the Next.js server as a proxy. Instead:
+
+- `services/api` is a standalone Fastify + TypeScript REST API. It owns the
+  Postgres connection, session/auth, storage access, PDF generation, and
+  matching logic. Nothing outside this service ever holds a database
+  credential or connects to Postgres directly.
+- `apps/web` is a Next.js app that calls `services/api` over HTTP. It holds
+  no privileged credentials — its server components/route handlers proxy
+  authenticated requests using the caller's session cookie, they don't embed
+  a service-role key.
+- `apps/android` calls the same REST API directly.
+
+This also matches a later move to Supabase cleanly: `services/api` becomes
+the thing that either talks to Supabase Postgres directly (self-hosted API)
+or gets replaced field-by-field with Supabase's own REST/RPC layer, without
+the web or Android client code changing shape.
+
+## Backend/data
+
+- **Database:** PostgreSQL 16. Schema is plain SQL (see `/database` and
+  `docs/DATABASE.md`), applied with a minimal migration runner
+  (`database/migrate.mjs`) rather than a heavyweight ORM migration tool. No
+  Supabase-specific extensions are used in the schema itself, so it can be
+  loaded into a Supabase project's Postgres instance unchanged when we move
+  there.
+- **Access layer:** `services/api` uses `pg` (node-postgres) directly with
+  hand-written parameterised SQL. No ORM. At this schema size a query
+  builder buys nothing and hides exactly what's being sent to Postgres,
+  which matters for a system holding ID numbers and certified documents.
+- **Auth:** Session-based. `POST /auth/register` and `POST /auth/login`
+  issue a signed, httpOnly session cookie (JWT, short-lived, `SameSite=Lax`,
+  `Secure` in production). Every route that touches applicant data checks
+  the session's `userId` and `role` before doing anything. Role-based access
+  is enforced in a single Fastify `preHandler` hook per route group, not
+  scattered through handlers.
+- **Secrets:** database URL, JWT signing secret, and storage credentials are
+  read from environment variables only (`.env`, never committed —
+  `.env.example` documents the shape). No credential is ever sent to a
+  client.
+
+## Storage abstraction
+
+Applicant documents (ID, certificates, CV, registrations, signatures,
+generated application PDFs) go through a single `StorageProvider` interface:
+
+```ts
+interface StorageProvider {
+  put(key: string, data: Buffer, contentType: string): Promise<void>;
+  get(key: string): Promise<Buffer>;
+  delete(key: string): Promise<void>;
+  getSignedUrl(key: string, expiresInSeconds: number): Promise<string>;
+}
+```
+
+- **Dev/local:** `LocalDiskStorageProvider` writes under a configured root
+  directory outside any web-servable path, and "signs" a URL as a
+  short-lived, HMAC-signed token verified by `services/api` (not a static
+  file server) so document access always goes through the API's
+  authorization check.
+- **Later:** `SupabaseStorageProvider` or `R2StorageProvider` implement the
+  same interface. No caller-facing code changes — only the provider bound in
+  `services/api/src/storage/index.ts` changes, behind one environment
+  variable (`STORAGE_DRIVER`).
+
+Nothing in `apps/web` or `apps/android` ever gets a raw storage credential;
+they get short-lived signed URLs issued by `services/api` after an
+authorization check.
+
+## Matching engine
+
+Matching is deterministic and rule-based — there is no ML model and nothing
+described as "AI matching." `packages/validation/src/matching.ts` compares a
+profile snapshot against a vacancy's `vacancy_requirements` rows and
+produces:
+
+- a match percentage,
+- the list of requirements the profile satisfies,
+- the list of requirements it doesn't,
+- the list of requirements it can't evaluate (data not captured, e.g. a
+  professional registration field left blank).
+
+This output is always advisory. Copy referencing it must say things like
+"appears to match" — never "eligible" or "qualifies." See
+`docs/API.md` for the exact response shape and `packages/validation` for the
+scoring rules.
+
+## Application generation
+
+An application is an **immutable snapshot**. When a user taps Apply:
+
+1. `services/api` reads the user's current profile, qualifications, work
+   experience, languages, references, and linked documents.
+2. It writes an `application_snapshots` row containing that data as JSON,
+   plus a new `applications` row pointing at it and at the vacancy.
+3. Every later step (review, sign, generate email/print package) reads from
+   the snapshot, never from the live profile. Editing the profile afterwards
+   does not change any submitted or in-progress application.
+
+PDF generation (`services/api/src/pdf`) uses `pdf-lib`. Two paths exist:
+
+- **Template fill:** if an admin has uploaded the official Z83 form as a
+  fillable PDF (an AcroForm) and it's registered as a system document, the
+  API fills that form's actual fields from the snapshot. This is the correct
+  long-term path — it reproduces the real government form exactly because
+  it *is* the real government form, just filled in.
+- **Fallback summary:** until that template is loaded, the API generates a
+  clearly labelled "Z83 application data" PDF from the snapshot, structured
+  the same way the real form is (personal particulars, qualifications,
+  experience, declaration) so a reviewer can read straight off it, but it is
+  not presented as a facsimile of the official form.
+
+The print package orders attachments per the vacancy's own submission
+instructions (`vacancy_requirements` / `submission instructions` data), not
+a hardcoded order.
+
+## Email preparation, not sending
+
+`services/api` prepares recipient, subject, body, and attachment list and
+stores that as the application's email package. It does not hold SMTP
+credentials in this phase and does not send mail. The UI and API responses
+must never say an email "was sent" — only "prepared," until real dispatch is
+implemented and explicitly confirmed by the user at send time.
+
+## Assisted (internet café) sessions
+
+`assisted_sessions` records a café staff member operating alongside an
+applicant. Rules enforced in `services/api`:
+
+- A session must be explicitly opened (applicant present, staff identified)
+  and explicitly closed.
+- While open, staff actions on the applicant's profile/documents/application
+  are permitted and are attributed to both the applicant and the staff
+  member in `audit_logs`.
+- Once closed, staff lose access to that applicant's data. There is no
+  standing staff-to-applicant link.
+- `cafe_accounts` / `cafe_staff` are separate from `admin_users` — café
+  staff have no administrative capability.
+
+## Circular ingestion
+
+Covered in full in `docs/CIRCULAR-INGESTION.md`. In short: `services/circular-engine`
+is a separate service from the applicant-facing API so a slow or failing
+ingestion run never affects applicant traffic. It writes into the same
+Postgres database, into its own tables (`circulars` → normalized `vacancies`
+→ `vacancy_requirements`), gated behind admin verification before anything
+is visible to applicants.
+
+## Security posture
+
+- All traffic over TLS in any deployed environment.
+- Passwords hashed with bcrypt; sessions are short-lived signed JWTs in
+  httpOnly cookies.
+- Every data-touching route checks authentication and role/ownership before
+  reading or writing.
+- `audit_logs` records who did what to which record, when — profile edits,
+  document access, application state changes, café-assisted actions, admin
+  circular actions.
+- Account deletion and data export are first-class API operations
+  (`docs/API.md`), not manual database work.
+- No real applicant data in development or seed data — seed data is
+  synthetic.
+
+## Android
+
+Native Kotlin + Jetpack Compose, not a WebView wrapper. It talks to the same
+`services/api` REST endpoints as the web app and shares the same data model
+(mirrored as Kotlin data classes generated from the same shapes as
+`packages/types`, kept in sync by hand for now — codegen is a later
+optimisation once the API contract has stabilised past the first vertical
+slice).
+
+## Deployment target (later, not built yet)
+
+- `apps/web` → Vercel or similar Next.js host.
+- `services/api` → any Node host (Fly.io, Render, Railway) with network
+  access to Postgres.
+- Database → Supabase Postgres.
+- Storage → Supabase Storage or Cloudflare R2.
+- `services/circular-engine` → scheduled job (weekly) on the same host as
+  `services/api` or a separate worker, writing to the same database.
+
+None of this changes application code — it changes environment variables and
+which `StorageProvider`/DB connection string is configured.
