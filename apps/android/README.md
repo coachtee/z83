@@ -51,7 +51,19 @@ artifacts) is confirmed blocked by the environment's network policy
 - **`:app` has not been compiled, built, or run here.** Its Kotlin/Compose
   source is written the same way any Android engineer would write it —
   reviewed carefully by hand for the mistakes a compiler would normally
-  catch — but it is genuinely unverified in this sandbox specifically
+  catch — but it is genuinely unverified in this sandbox specifically.
+  `app/build.gradle.kts` applies `org.jetbrains.kotlin.plugin.compose`
+  version `2.1.0` alongside `org.jetbrains.kotlin.android` — required
+  since Kotlin 2.0 decoupled the Compose compiler from the Kotlin Gradle
+  plugin, and the version must match the Kotlin version exactly. This was
+  reported failing on a real Windows build (`Starting in Kotlin 2.0, the
+  Compose Compiler Gradle plugin is required when compose is enabled`)
+  and fixed here, but re-running `:app:assembleDebug` in this sandbox
+  still fails at the earlier, unrelated `com.android.application` plugin
+  resolution step (the `dl.google.com` block above) before Gradle ever
+  gets far enough to re-resolve the Compose compiler plugin — so this fix
+  is unverified end-to-end here too, and should be confirmed by an actual
+  build on a machine with SDK/network access next.
   because the plugin repository is unreachable, not skipped for
   convenience. **On a machine with normal internet access and an Android
   SDK** (`compileSdk = 35`, `minSdk = 26`, JDK 17+):

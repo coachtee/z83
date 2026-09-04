@@ -1,6 +1,11 @@
 plugins {
     id("com.android.application") version "8.7.2"
     id("org.jetbrains.kotlin.android") version "2.1.0"
+    // Since Kotlin 2.0, the Compose compiler is a separate Gradle plugin
+    // rather than bundled into the Kotlin Android plugin — required
+    // whenever buildFeatures.compose = true. Must match the Kotlin
+    // version above exactly.
+    id("org.jetbrains.kotlin.plugin.compose") version "2.1.0"
 }
 
 android {
