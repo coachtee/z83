@@ -4,6 +4,7 @@ import { buildApp } from "../app.js";
 import { pool } from "../db.js";
 import { hashPassword } from "../auth.js";
 import { createUser } from "../repo/users.js";
+import { addRequirement, createCircular, createDraftVacancy, getOrCreateDepartment } from "../repo/vacancies.js";
 import { resetDatabase } from "./dbReset.js";
 
 async function seedDocumentTypes(): Promise<void> {
@@ -235,5 +236,96 @@ describe("Internet café assisted sessions", () => {
     // Staff's own (empty) application list — never the applicant's.
     expect(attempt.statusCode).toBe(200);
     expect(attempt.json().applications).toEqual([]);
+  });
+
+  it("personalises the vacancy match to the applicant during an open session, never to staff themselves", async () => {
+    const departmentId = await getOrCreateDepartment("Match Test Department");
+    const circularId = await createCircular({
+      circularNumber: `MATCH-TEST-${Date.now()}`,
+      publicationDate: "2026-01-01",
+      ingestionMethod: "manual_upload",
+    });
+    const vacancyId = await createDraftVacancy({
+      circularId,
+      departmentId,
+      jobTitle: "Test Match Post",
+      referenceNumber: `REF-${Date.now()}`,
+      salaryText: null,
+      province: null,
+      locationText: null,
+      pageNumber: null,
+      closingAt: null,
+      submissionMethod: "email",
+      submissionEmail: "test@example.org",
+      submissionAddress: null,
+      specialInstructions: null,
+      rawExtractedText: null,
+    });
+    await addRequirement(vacancyId, {
+      requirementType: "drivers_licence",
+      description: "Valid Code B driving licence",
+      minimumValue: "B",
+      isMandatory: true,
+      orderIndex: 0,
+    });
+    await pool.query(`UPDATE vacancies SET status = 'published' WHERE id = $1`, [vacancyId]);
+
+    const applicantEmail = `match-assist-${Date.now()}@example.com`;
+    const applicantPassword = "applicant-password-123";
+    await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: applicantEmail, password: applicantPassword, fullName: "Match Assist Applicant" },
+    });
+
+    const staff = await createCafeStaff(app, "Match Café");
+    const open = await app.inject({
+      method: "POST",
+      url: "/cafe/sessions",
+      ...staff.authed,
+      payload: { applicantEmail },
+    });
+    const sessionId = open.json().session.id;
+    await app.inject({
+      method: "POST",
+      url: `/cafe/sessions/${sessionId}/authorize`,
+      ...staff.authed,
+      payload: { password: applicantPassword },
+    });
+
+    // Staff gives the applicant a Code B licence on their (the applicant's) profile.
+    const edit = await app.inject({
+      method: "PUT",
+      url: "/profile",
+      ...staff.authed,
+      headers: { "x-assisted-session-id": sessionId },
+      payload: { driversLicenceCodes: ["B"] },
+    });
+    expect(edit.statusCode).toBe(200);
+
+    // Without the header, staff has no profile of their own — no personalised match.
+    const staffOwnView = await app.inject({ method: "GET", url: `/vacancies/${vacancyId}`, ...staff.authed });
+    expect(staffOwnView.json().match).toBeNull();
+
+    // With the header, the applicant's own match shows up — read-only, no write.
+    const assistedView = await app.inject({
+      method: "GET",
+      url: `/vacancies/${vacancyId}`,
+      ...staff.authed,
+      headers: { "x-assisted-session-id": sessionId },
+    });
+    expect(assistedView.json().match.percentage).toBe(100);
+    expect(assistedView.json().match.matched).toHaveLength(1);
+
+    const assistedList = await app.inject({
+      method: "GET",
+      url: "/vacancies",
+      ...staff.authed,
+      headers: { "x-assisted-session-id": sessionId },
+    });
+    const listed = assistedList
+      .json()
+      .vacancies.find((v: { id: string }) => v.id === vacancyId);
+    expect(listed.matchPercentage).toBe(100);
   });
 });

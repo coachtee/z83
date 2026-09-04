@@ -139,7 +139,7 @@ applicant's profile/documents) once the applicant authorizes it themselves.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/cafe/applicants?email=` | `{ exists: boolean }` — whether an applicant account already exists for this email, so staff know whether to collect a new password or ask the applicant to authorize with their existing one. |
-| POST | `/cafe/sessions` | `{ applicantEmail, newApplicantPassword?, openedReason? }`. If the email has no account yet, `newApplicantPassword` is required — the applicant chooses it themselves at the keyboard, which is what lets that session start already-`open` (there's no prior account to protect). If the account already exists, the session starts `pending` and `newApplicantPassword` is ignored. |
+| POST | `/cafe/sessions` | `{ applicantEmail, newApplicantPassword?, applicantFullName?, openedReason? }`. If the email has no account yet, `newApplicantPassword` is required — the applicant chooses it themselves at the keyboard, which is what lets that session start already-`open` (there's no prior account to protect); `applicantFullName` names the new account (defaults to a placeholder if omitted). If the account already exists, the session starts `pending` and both `newApplicantPassword`/`applicantFullName` are ignored. |
 | POST | `/cafe/sessions/:id/authorize` | `{ password }`. The applicant's own password, checked against their own account. The only way a `pending` session becomes `open`. |
 | POST | `/cafe/sessions/:id/close` | Closes it (from `pending` or `open`); staff loses access to that applicant immediately after. |
 | GET | `/cafe/sessions/:id` | Session state, staff-only, while `pending` or `open` (not after close). |
@@ -148,10 +148,16 @@ Once a session is `open`, staff calls to `/profile*` and `/documents*`
 routes carry an `X-Assisted-Session-Id` header naming it. The API resolves
 the *effective* user (the applicant, from the session) separately from the
 *actor* (the staff member, from their own login) — every such write is
-recorded in `audit_logs` against both. Applying, reviewing, and signing are
-deliberately **not** assistable this way: those require the applicant's own
-authenticated session, never staff acting on their behalf, since a
-signature and a submission decision have to be the applicant's own act.
+recorded in `audit_logs` against both. The same header, when present on
+`GET /vacancies` or `GET /vacancies/:id`, also personalises the
+`matchPercentage`/`match` block against the applicant's profile instead of
+staff's own — this is read-only and exists so staff can help find a
+matching vacancy; an invalid or missing session simply falls back to no
+personalised match rather than failing the request. Applying, reviewing,
+and signing are deliberately **not** assistable this way: those require the
+applicant's own authenticated session, never staff acting on their behalf,
+since a signature and a submission decision have to be the applicant's own
+act.
 
 ## Account — designed
 

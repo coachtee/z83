@@ -22,6 +22,8 @@ const openSessionSchema = z.object({
    * chooses it themselves, right there, which is what makes creating the
    * account itself the moment of consent (see the design note below). */
   newApplicantPassword: z.string().min(8).optional(),
+  /** Applicant's own name, given when creating a brand-new account. */
+  applicantFullName: z.string().trim().min(1).optional(),
   openedReason: z.string().trim().optional(),
 });
 
@@ -71,7 +73,7 @@ export function registerCafeRoutes(app: FastifyInstance): void {
       const created = await createUser({
         email: parsed.data.applicantEmail,
         passwordHash,
-        fullName: "New applicant",
+        fullName: parsed.data.applicantFullName ?? "New applicant",
         role: "applicant",
       });
       await createEmptyProfile(created.id);

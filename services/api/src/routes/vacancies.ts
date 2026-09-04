@@ -1,8 +1,29 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { computeMatch } from "@z83/validation";
 import { HttpError, tryAuthenticate } from "../auth.js";
+import { resolveActingContext } from "../assisted-context.js";
 import { getVacancyById, listPublishedVacancies, listRequirements } from "../repo/vacancies.js";
 import { getFullProfileByUserId } from "../repo/profiles.js";
+
+/**
+ * Whose profile to match against for this vacancy view. Ordinary users
+ * match against their own profile. Café staff only get a personalised
+ * match while actively assisting — an open, authorized session named by
+ * the same header the profile/document routes use — since this is
+ * read-only and needed for the café flow's "find a matching vacancy"
+ * step; an invalid or missing session just falls back to no personalised
+ * match rather than failing the whole page.
+ */
+async function resolveMatchProfileUserId(request: FastifyRequest): Promise<string | null> {
+  if (!request.authUser) return null;
+  if (request.authUser.role !== "cafe_staff") return request.authUser.userId;
+  if (!request.headers["x-assisted-session-id"]) return null;
+  try {
+    return (await resolveActingContext(request)).effectiveUserId;
+  } catch {
+    return null;
+  }
+}
 
 export function registerVacancyRoutes(app: FastifyInstance): void {
   app.get<{ Querystring: { province?: string; departmentId?: string } }>(
@@ -14,9 +35,8 @@ export function registerVacancyRoutes(app: FastifyInstance): void {
         departmentId: request.query.departmentId,
       });
 
-      const profile = request.authUser
-        ? await getFullProfileByUserId(request.authUser.userId)
-        : null;
+      const matchUserId = await resolveMatchProfileUserId(request);
+      const profile = matchUserId ? await getFullProfileByUserId(matchUserId) : null;
 
       const withMatch = await Promise.all(
         vacancies.map(async (vacancy) => {
@@ -42,8 +62,9 @@ export function registerVacancyRoutes(app: FastifyInstance): void {
       const requirements = await listRequirements(vacancy.id);
 
       let match = null;
-      if (request.authUser) {
-        const profile = await getFullProfileByUserId(request.authUser.userId);
+      const matchUserId = await resolveMatchProfileUserId(request);
+      if (matchUserId) {
+        const profile = await getFullProfileByUserId(matchUserId);
         if (profile) {
           match = computeMatch(profile, requirements);
         }
