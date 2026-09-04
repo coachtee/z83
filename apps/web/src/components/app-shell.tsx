@@ -6,16 +6,19 @@ import { useSession } from "@/hooks/use-session";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
-const NAV_LINKS = [
+const APPLICANT_NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/profile", label: "Profile" },
   { href: "/vacancies", label: "Vacancies" },
   { href: "/applications", label: "My applications" },
 ];
 
+const CAFE_NAV_LINKS = [{ href: "/cafe", label: "Assisted sessions" }];
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useSession();
   const router = useRouter();
+  const navLinks = user?.role === "cafe_staff" ? CAFE_NAV_LINKS : APPLICANT_NAV_LINKS;
 
   async function handleLogout() {
     await api.logout();
@@ -32,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           {!loading && user && (
             <nav className="hidden items-center gap-5 text-sm sm:flex">
-              {NAV_LINKS.map((link) => (
+              {navLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -62,7 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         {!loading && user && (
           <nav className="flex items-center gap-4 overflow-x-auto border-t px-4 py-2 text-sm sm:hidden">
-            {NAV_LINKS.map((link) => (
+            {navLinks.map((link) => (
               <Link key={link.href} href={link.href} className="text-muted-foreground whitespace-nowrap">
                 {link.label}
               </Link>

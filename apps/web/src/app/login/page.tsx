@@ -23,8 +23,8 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await api.login({ email, password });
-      router.push("/dashboard");
+      const { user } = await api.login({ email, password });
+      router.push(user.role === "cafe_staff" ? "/cafe" : "/dashboard");
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't sign you in.");

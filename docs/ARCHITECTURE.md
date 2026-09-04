@@ -199,6 +199,14 @@ applicant. Rules enforced in `services/api`:
   staff-to-applicant link outside an open, authorized session.
 - `cafe_accounts` / `cafe_staff` are separate from `admin_users` — café
   staff have no administrative capability.
+- `apps/web`'s `/cafe` route is the staff-facing UI for all of this: look up
+  or create an applicant, hand the keyboard to them to authorize (or, for a
+  walk-in, to choose a password), then a session workspace
+  (`/cafe/session/[id]`) for editing profile, uploading documents, and
+  browsing matching vacancies — every action there carries the session's
+  `X-Assisted-Session-Id` header. It reuses the same components and layout
+  as the applicant-facing pages so the product feels the same; it stops
+  short of application/review/sign, which stay applicant-only.
 
 ## Circular ingestion
 

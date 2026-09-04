@@ -3,6 +3,7 @@ import type {
   ApplicationDocument,
   ApplicationEvent,
   ApplicationSnapshot,
+  AssistedSession,
   DocumentTypeCode,
   EmailPackage,
   FullProfile,
@@ -13,6 +14,12 @@ import type {
   VacancyRequirement,
   ValidationReport,
 } from "@z83/types";
+
+/** Header naming an open café-assisted session, so profile/document/vacancy
+ * requests act on the applicant the session names instead of the caller. */
+export function assistedHeaders(sessionId: string): HeadersInit {
+  return { "X-Assisted-Session-Id": sessionId };
+}
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
@@ -65,53 +72,60 @@ export const api = {
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   me: () => request<{ user: User }>("/auth/me"),
 
-  getProfile: () => request<FullProfile>("/profile"),
-  updateProfile: (input: Record<string, unknown>) =>
-    request<{ profile: FullProfile["profile"] }>("/profile", { method: "PUT", body: JSON.stringify(input) }),
+  getProfile: (headers?: HeadersInit) => request<FullProfile>("/profile", { headers }),
+  updateProfile: (input: Record<string, unknown>, headers?: HeadersInit) =>
+    request<{ profile: FullProfile["profile"] }>("/profile", {
+      method: "PUT",
+      body: JSON.stringify(input),
+      headers,
+    }),
   getCompleteness: () => request<ValidationReport>("/profile/completeness"),
-  addQualification: (input: Record<string, unknown>) =>
+  addQualification: (input: Record<string, unknown>, headers?: HeadersInit) =>
     request<{ qualification: FullProfile["qualifications"][number] }>(
       "/profile/qualifications",
-      json(input),
+      { ...json(input), headers },
     ),
   deleteQualification: (id: string) =>
     request<void>(`/profile/qualifications/${id}`, { method: "DELETE" }),
-  addWorkExperience: (input: Record<string, unknown>) =>
+  addWorkExperience: (input: Record<string, unknown>, headers?: HeadersInit) =>
     request<{ experience: FullProfile["workExperience"][number] }>(
       "/profile/work-experience",
-      json(input),
+      { ...json(input), headers },
     ),
-  addReference: (input: Record<string, unknown>) =>
+  addReference: (input: Record<string, unknown>, headers?: HeadersInit) =>
     request<{ reference: FullProfile["references"][number] }>(
       "/profile/references",
-      json(input),
+      { ...json(input), headers },
     ),
 
-  listDocuments: () => request<{ documents: ProfileDocument[] }>("/documents"),
-  uploadDocument: (file: File, documentTypeCode: DocumentTypeCode) => {
+  listDocuments: (headers?: HeadersInit) =>
+    request<{ documents: ProfileDocument[] }>("/documents", { headers }),
+  uploadDocument: (file: File, documentTypeCode: DocumentTypeCode, headers?: HeadersInit) => {
     const form = new FormData();
     form.append("documentTypeCode", documentTypeCode);
     form.append("file", file);
     return request<{ document: ProfileDocument }>("/documents", {
       method: "POST",
       body: form,
+      headers,
     });
   },
   getDocumentUrl: (id: string) => request<{ url: string }>(`/documents/${id}/url`),
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
 
-  listVacancies: (params?: { province?: string }) => {
+  listVacancies: (params?: { province?: string }, headers?: HeadersInit) => {
     const query = params?.province ? `?province=${encodeURIComponent(params.province)}` : "";
     return request<{ vacancies: (Vacancy & { matchPercentage: number | null })[] }>(
       `/vacancies${query}`,
+      { headers },
     );
   },
-  getVacancy: (id: string) =>
+  getVacancy: (id: string, headers?: HeadersInit) =>
     request<{
       vacancy: Vacancy;
       requirements: VacancyRequirement[];
       match: MatchResult | null;
-    }>(`/vacancies/${id}`),
+    }>(`/vacancies/${id}`, { headers }),
 
   listApplications: () => request<{ applications: Application[] }>("/applications"),
   createApplication: (vacancyId: string) =>
@@ -150,4 +164,19 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
+
+  cafeFindApplicant: (email: string) =>
+    request<{ exists: boolean }>(`/cafe/applicants?email=${encodeURIComponent(email)}`),
+  cafeOpenSession: (input: {
+    applicantEmail: string;
+    newApplicantPassword?: string;
+    applicantFullName?: string;
+    openedReason?: string;
+  }) =>
+    request<{ session: AssistedSession; newAccount: boolean }>("/cafe/sessions", json(input)),
+  cafeAuthorizeSession: (id: string, password: string) =>
+    request<{ session: AssistedSession }>(`/cafe/sessions/${id}/authorize`, json({ password })),
+  cafeCloseSession: (id: string) =>
+    request<{ session: AssistedSession }>(`/cafe/sessions/${id}/close`, { method: "POST" }),
+  cafeGetSession: (id: string) => request<{ session: AssistedSession }>(`/cafe/sessions/${id}`),
 };
