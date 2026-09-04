@@ -90,7 +90,8 @@ fun Z83App() {
             composable("login") {
                 LoginScreen(
                     apiClient = apiClient,
-                    onLoggedIn = {
+                    onLoggedIn = { user ->
+                        currentUser = user
                         navController.navigate("home") { popUpTo("login") { inclusive = true } }
                     },
                     onGoToRegister = { navController.navigate("register") },
@@ -99,7 +100,8 @@ fun Z83App() {
             composable("register") {
                 RegisterScreen(
                     apiClient = apiClient,
-                    onRegistered = {
+                    onRegistered = { user ->
+                        currentUser = user
                         navController.navigate("home") { popUpTo("login") { inclusive = true } }
                     },
                     onGoToLogin = { navController.popBackStack() },

@@ -53,27 +53,41 @@ fun ProfileScreen(apiClient: ApiClient, onSignOut: () -> Unit) {
     var profile by remember { mutableStateOf<FullProfile?>(null) }
     var documents by remember { mutableStateOf<List<AppDocument>>(emptyList()) }
     var refreshKey by remember { mutableStateOf(0) }
+    var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(refreshKey) {
-        profile = apiClient.getProfile()
-        documents = apiClient.listDocuments()
+        try {
+            profile = apiClient.getProfile()
+            documents = apiClient.listDocuments()
+        } catch (e: ApiClient.ApiException) {
+            error = e.message
+        }
     }
 
     fun refresh() {
         scope.launch {
-            profile = apiClient.getProfile()
-            documents = apiClient.listDocuments()
+            try {
+                profile = apiClient.getProfile()
+                documents = apiClient.listDocuments()
+            } catch (e: ApiClient.ApiException) {
+                error = e.message
+            }
         }
     }
 
-    val current = profile ?: return
+    val current = profile
+    if (current == null) {
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
+        return
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item { Text("Your Z83 profile", style = MaterialTheme.typography.headlineSmall) }
+        item { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
         item {
             PersonalParticularsSection(apiClient = apiClient, profile = current) { refresh() }
         }
@@ -92,7 +106,14 @@ fun ProfileScreen(apiClient: ApiClient, onSignOut: () -> Unit) {
         item {
             androidx.compose.material3.OutlinedButton(onClick = {
                 scope.launch {
-                    apiClient.logout()
+                    // Sign out locally regardless of whether the server call
+                    // succeeds — a network hiccup shouldn't trap the user in
+                    // a session they're trying to leave.
+                    try {
+                        apiClient.logout()
+                    } catch (e: ApiClient.ApiException) {
+                        // ignored — proceed to sign out either way
+                    }
                     onSignOut()
                 }
             }) {
@@ -119,6 +140,7 @@ private fun PersonalParticularsSection(apiClient: ApiClient, profile: FullProfil
     var licenceCodes by remember(p.id) { mutableStateOf((p.driversLicenceCodes ?: emptyList()).toSet()) }
     var saving by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -156,31 +178,38 @@ private fun PersonalParticularsSection(apiClient: ApiClient, profile: FullProfil
                 }
             }
 
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(
                 enabled = !saving,
                 onClick = {
                     saving = true
                     saved = false
+                    error = null
                     scope.launch {
-                        apiClient.updateProfile(
-                            ProfileUpdateRequest(
-                                idNumber = idNumber.ifBlank { null },
-                                dateOfBirth = dateOfBirth.ifBlank { null },
-                                gender = gender.ifBlank { null },
-                                nationality = nationality.ifBlank { null },
-                                race = race.ifBlank { null },
-                                addressLine1 = addressLine1.ifBlank { null },
-                                city = city.ifBlank { null },
-                                province = province.ifBlank { null },
-                                postalCode = postalCode.ifBlank { null },
-                                phone = phone.ifBlank { null },
-                                email = email.ifBlank { null },
-                                driversLicenceCodes = licenceCodes.toList(),
-                            ),
-                        )
-                        saving = false
-                        saved = true
-                        onSaved()
+                        try {
+                            apiClient.updateProfile(
+                                ProfileUpdateRequest(
+                                    idNumber = idNumber.ifBlank { null },
+                                    dateOfBirth = dateOfBirth.ifBlank { null },
+                                    gender = gender.ifBlank { null },
+                                    nationality = nationality.ifBlank { null },
+                                    race = race.ifBlank { null },
+                                    addressLine1 = addressLine1.ifBlank { null },
+                                    city = city.ifBlank { null },
+                                    province = province.ifBlank { null },
+                                    postalCode = postalCode.ifBlank { null },
+                                    phone = phone.ifBlank { null },
+                                    email = email.ifBlank { null },
+                                    driversLicenceCodes = licenceCodes.toList(),
+                                ),
+                            )
+                            saved = true
+                            onSaved()
+                        } catch (e: ApiClient.ApiException) {
+                            error = e.message
+                        } finally {
+                            saving = false
+                        }
                     }
                 },
             ) {
@@ -197,6 +226,7 @@ private fun QualificationsSection(apiClient: ApiClient, profile: FullProfile, on
     var qualificationName by remember { mutableStateOf("") }
     var nqfLevel by remember { mutableStateOf("") }
     var yearCompleted by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -210,23 +240,29 @@ private fun QualificationsSection(apiClient: ApiClient, profile: FullProfile, on
             LabeledField("Qualification name", qualificationName) { qualificationName = it }
             LabeledField("NQF level", nqfLevel) { nqfLevel = it }
             LabeledField("Year completed", yearCompleted) { yearCompleted = it }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(onClick = {
+                error = null
                 scope.launch {
-                    apiClient.addQualification(
-                        QualificationRequest(
-                            institution = institution,
-                            qualificationName = qualificationName,
-                            nqfLevel = nqfLevel.toIntOrNull(),
-                            yearCompleted = yearCompleted.toIntOrNull(),
-                            stillStudying = false,
-                            orderIndex = profile.qualifications.size,
-                        ),
-                    )
-                    institution = ""
-                    qualificationName = ""
-                    nqfLevel = ""
-                    yearCompleted = ""
-                    onAdded()
+                    try {
+                        apiClient.addQualification(
+                            QualificationRequest(
+                                institution = institution,
+                                qualificationName = qualificationName,
+                                nqfLevel = nqfLevel.toIntOrNull(),
+                                yearCompleted = yearCompleted.toIntOrNull(),
+                                stillStudying = false,
+                                orderIndex = profile.qualifications.size,
+                            ),
+                        )
+                        institution = ""
+                        qualificationName = ""
+                        nqfLevel = ""
+                        yearCompleted = ""
+                        onAdded()
+                    } catch (e: ApiClient.ApiException) {
+                        error = e.message
+                    }
                 }
             }) {
                 Text("Add qualification")
@@ -241,6 +277,7 @@ private fun WorkExperienceSection(apiClient: ApiClient, profile: FullProfile, on
     var jobTitle by remember { mutableStateOf("") }
     var startDate by remember { mutableStateOf("") }
     var isCurrent by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -257,22 +294,28 @@ private fun WorkExperienceSection(apiClient: ApiClient, profile: FullProfile, on
                 androidx.compose.material3.Checkbox(checked = isCurrent, onCheckedChange = { isCurrent = it })
                 Text("This is my current job")
             }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(onClick = {
+                error = null
                 scope.launch {
-                    apiClient.addWorkExperience(
-                        WorkExperienceRequest(
-                            employer = employer,
-                            jobTitle = jobTitle,
-                            startDate = startDate,
-                            isCurrent = isCurrent,
-                            orderIndex = profile.workExperience.size,
-                        ),
-                    )
-                    employer = ""
-                    jobTitle = ""
-                    startDate = ""
-                    isCurrent = false
-                    onAdded()
+                    try {
+                        apiClient.addWorkExperience(
+                            WorkExperienceRequest(
+                                employer = employer,
+                                jobTitle = jobTitle,
+                                startDate = startDate,
+                                isCurrent = isCurrent,
+                                orderIndex = profile.workExperience.size,
+                            ),
+                        )
+                        employer = ""
+                        jobTitle = ""
+                        startDate = ""
+                        isCurrent = false
+                        onAdded()
+                    } catch (e: ApiClient.ApiException) {
+                        error = e.message
+                    }
                 }
             }) {
                 Text("Add work experience")
@@ -287,6 +330,7 @@ private fun ReferencesSection(apiClient: ApiClient, profile: FullProfile, onAdde
     var organisation by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -301,22 +345,28 @@ private fun ReferencesSection(apiClient: ApiClient, profile: FullProfile, onAdde
             LabeledField("Organisation", organisation) { organisation = it }
             LabeledField("Phone", phone) { phone = it }
             LabeledField("Email", email) { email = it }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(onClick = {
+                error = null
                 scope.launch {
-                    apiClient.addReference(
-                        ReferenceRequest(
-                            fullName = fullName,
-                            organisation = organisation.ifBlank { null },
-                            phone = phone.ifBlank { null },
-                            email = email.ifBlank { null },
-                            orderIndex = profile.references.size,
-                        ),
-                    )
-                    fullName = ""
-                    organisation = ""
-                    phone = ""
-                    email = ""
-                    onAdded()
+                    try {
+                        apiClient.addReference(
+                            ReferenceRequest(
+                                fullName = fullName,
+                                organisation = organisation.ifBlank { null },
+                                phone = phone.ifBlank { null },
+                                email = email.ifBlank { null },
+                                orderIndex = profile.references.size,
+                            ),
+                        )
+                        fullName = ""
+                        organisation = ""
+                        phone = ""
+                        email = ""
+                        onAdded()
+                    } catch (e: ApiClient.ApiException) {
+                        error = e.message
+                    }
                 }
             }) {
                 Text("Add reference")
@@ -330,15 +380,21 @@ private fun DocumentsSection(apiClient: ApiClient, documents: List<AppDocument>,
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pendingType by remember { mutableStateOf<DocumentTypeCode?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         val type = pendingType
         if (uri != null && type != null) {
+            error = null
             scope.launch {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
-                val mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream"
-                apiClient.uploadDocument(bytes, "$type-${System.currentTimeMillis()}", type, mimeType)
-                onUploaded()
+                try {
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
+                    val mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                    apiClient.uploadDocument(bytes, "$type-${System.currentTimeMillis()}", type, mimeType)
+                    onUploaded()
+                } catch (e: ApiClient.ApiException) {
+                    error = e.message
+                }
             }
         }
     }
@@ -350,6 +406,7 @@ private fun DocumentsSection(apiClient: ApiClient, documents: List<AppDocument>,
             for (doc in documents) {
                 Text("${doc.originalFilename} (${doc.documentTypeCode})")
             }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             HorizontalDivider()
             for ((code, label) in DOCUMENT_TYPES) {
                 Button(onClick = {

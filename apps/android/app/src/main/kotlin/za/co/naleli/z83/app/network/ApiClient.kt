@@ -80,18 +80,30 @@ class ApiClient(private val baseUrl: String = "http://10.0.2.2:4000") {
 
     private suspend fun <T> execute(request: Request, deserializer: DeserializationStrategy<T>?): T? =
         withContext(Dispatchers.IO) {
-            client.newCall(request).execute().use { response ->
-                val bodyString = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    val error = runCatching { decodeJson.decodeFromString<ErrorBody>(bodyString) }.getOrNull()
-                    throw ApiException(
-                        response.code,
-                        error?.error?.code ?: "UNKNOWN",
-                        error?.error?.message ?: "Something went wrong.",
-                    )
+            try {
+                client.newCall(request).execute().use { response ->
+                    val bodyString = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        val error = runCatching { decodeJson.decodeFromString<ErrorBody>(bodyString) }.getOrNull()
+                        throw ApiException(
+                            response.code,
+                            error?.error?.code ?: "UNKNOWN",
+                            error?.error?.message ?: "Something went wrong.",
+                        )
+                    }
+                    if (deserializer == null || bodyString.isBlank()) null
+                    else decodeJson.decodeFromString(deserializer, bodyString)
                 }
-                if (deserializer == null || bodyString.isBlank()) null
-                else decodeJson.decodeFromString(deserializer, bodyString)
+            } catch (e: ApiException) {
+                throw e
+            } catch (e: java.io.IOException) {
+                // Server unreachable, DNS failure, timeout, or cleartext
+                // blocked by network_security_config — every screen only
+                // catches ApiException, so without this a connection
+                // problem crashes the app instead of showing an error.
+                throw ApiException(0, "NETWORK_ERROR", "Couldn't reach the server. Check your connection and try again.")
+            } catch (e: kotlinx.serialization.SerializationException) {
+                throw ApiException(0, "PARSE_ERROR", "Got an unexpected response from the server.")
             }
         }
 

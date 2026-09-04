@@ -21,9 +21,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import za.co.naleli.z83.app.network.ApiClient
+import za.co.naleli.z83.shared.User
 
 @Composable
-fun LoginScreen(apiClient: ApiClient, onLoggedIn: () -> Unit, onGoToRegister: () -> Unit = {}) {
+fun LoginScreen(apiClient: ApiClient, onLoggedIn: (User) -> Unit, onGoToRegister: () -> Unit = {}) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -65,8 +66,8 @@ fun LoginScreen(apiClient: ApiClient, onLoggedIn: () -> Unit, onGoToRegister: ()
                 error = null
                 scope.launch {
                     try {
-                        apiClient.login(email, password)
-                        onLoggedIn()
+                        val user = apiClient.login(email, password)
+                        onLoggedIn(user)
                     } catch (e: ApiClient.ApiException) {
                         error = e.message
                     } finally {

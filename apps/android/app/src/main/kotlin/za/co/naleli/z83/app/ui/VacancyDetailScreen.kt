@@ -29,10 +29,18 @@ fun VacancyDetailScreen(apiClient: ApiClient, vacancyId: String, onApplied: (Str
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(vacancyId) {
-        detail = apiClient.getVacancy(vacancyId)
+        try {
+            detail = apiClient.getVacancy(vacancyId)
+        } catch (e: ApiClient.ApiException) {
+            error = e.message
+        }
     }
 
-    val current = detail ?: return
+    val current = detail
+    if (current == null) {
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
+        return
+    }
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         item {

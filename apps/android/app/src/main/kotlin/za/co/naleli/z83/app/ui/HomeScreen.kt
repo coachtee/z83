@@ -33,10 +33,15 @@ fun HomeScreen(
 ) {
     var completeness by remember { mutableStateOf<ValidationReport?>(null) }
     var topMatches by remember { mutableStateOf<List<Vacancy>>(emptyList()) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        completeness = apiClient.getCompleteness()
-        topMatches = apiClient.listVacancies().take(3)
+        try {
+            completeness = apiClient.getCompleteness()
+            topMatches = apiClient.listVacancies().take(3)
+        } catch (e: ApiClient.ApiException) {
+            error = e.message
+        }
     }
 
     Column(
@@ -44,6 +49,7 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("Welcome back, ${user.fullName.substringBefore(" ")}", style = MaterialTheme.typography.titleLarge)
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

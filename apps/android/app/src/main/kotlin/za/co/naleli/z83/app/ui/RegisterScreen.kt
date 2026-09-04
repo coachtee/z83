@@ -21,9 +21,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import za.co.naleli.z83.app.network.ApiClient
+import za.co.naleli.z83.shared.User
 
 @Composable
-fun RegisterScreen(apiClient: ApiClient, onRegistered: () -> Unit, onGoToLogin: () -> Unit) {
+fun RegisterScreen(apiClient: ApiClient, onRegistered: (User) -> Unit, onGoToLogin: () -> Unit) {
     var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -69,8 +70,8 @@ fun RegisterScreen(apiClient: ApiClient, onRegistered: () -> Unit, onGoToLogin: 
                 error = null
                 scope.launch {
                     try {
-                        apiClient.register(email, password, fullName)
-                        onRegistered()
+                        val user = apiClient.register(email, password, fullName)
+                        onRegistered(user)
                     } catch (e: ApiClient.ApiException) {
                         error = e.message
                     } finally {

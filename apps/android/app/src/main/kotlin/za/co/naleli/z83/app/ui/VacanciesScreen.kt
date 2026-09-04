@@ -24,18 +24,28 @@ import za.co.naleli.z83.shared.Vacancy
 @Composable
 fun VacanciesScreen(apiClient: ApiClient, onOpenVacancy: (String) -> Unit) {
     var vacancies by remember { mutableStateOf<List<Vacancy>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        vacancies = apiClient.listVacancies()
+        try {
+            vacancies = apiClient.listVacancies()
+        } catch (e: ApiClient.ApiException) {
+            error = e.message
+        }
     }
 
     val current = vacancies
     if (current == null) {
+        val currentError = error
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.Center,
         ) {
-            CircularProgressIndicator(modifier = Modifier.padding(24.dp))
+            if (currentError != null) {
+                Text(currentError, color = androidx.compose.material3.MaterialTheme.colorScheme.error)
+            } else {
+                CircularProgressIndicator(modifier = Modifier.padding(24.dp))
+            }
         }
         return
     }

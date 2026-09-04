@@ -32,12 +32,21 @@ private val STATUS_LABELS = mapOf(
 @Composable
 fun ApplicationsScreen(apiClient: ApiClient, onOpenApplication: (String) -> Unit) {
     var applications by remember { mutableStateOf<List<Application>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        applications = apiClient.listApplications()
+        try {
+            applications = apiClient.listApplications()
+        } catch (e: ApiClient.ApiException) {
+            error = e.message
+        }
     }
 
-    val current = applications ?: return
+    val current = applications
+    if (current == null) {
+        error?.let { Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
+        return
+    }
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         if (current.isEmpty()) {

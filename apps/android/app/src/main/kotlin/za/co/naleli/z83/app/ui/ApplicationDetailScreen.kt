@@ -53,7 +53,13 @@ fun ApplicationDetailScreen(apiClient: ApiClient, applicationId: String) {
         detail = apiClient.getApplication(applicationId)
     }
 
-    LaunchedEffect(applicationId) { refresh() }
+    LaunchedEffect(applicationId) {
+        try {
+            refresh()
+        } catch (e: ApiClient.ApiException) {
+            error = e.message
+        }
+    }
 
     fun runAction(block: suspend () -> Unit) {
         busy = true
@@ -69,7 +75,11 @@ fun ApplicationDetailScreen(apiClient: ApiClient, applicationId: String) {
         }
     }
 
-    val current = detail ?: return
+    val current = detail
+    if (current == null) {
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
+        return
+    }
     val vacancy = current.vacancy ?: return
     val status = current.application.status
 
