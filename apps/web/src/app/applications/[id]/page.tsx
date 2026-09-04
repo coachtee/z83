@@ -2,14 +2,16 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/hooks/use-session";
 import { ApiError, api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SignaturePad } from "@/components/signature-pad";
 import type {
   Application,
@@ -20,7 +22,16 @@ import type {
   Vacancy,
   ValidationReport,
 } from "@z83/types";
-import { CheckCircle2, XCircle } from "lucide-react";
+import {
+  ArrowClockwise,
+  CheckCircle,
+  CircleNotch,
+  FileText,
+  PaperPlaneTilt,
+  WarningCircle,
+  XCircle,
+} from "@phosphor-icons/react";
+import type { VariantProps } from "class-variance-authority";
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Draft",
@@ -30,6 +41,18 @@ const STATUS_LABEL: Record<string, string> = {
   print_prepared: "Print-ready",
   submitted: "Submitted",
   closed: "Closed",
+};
+
+type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
+
+const STATUS_VARIANT: Record<string, BadgeVariant> = {
+  draft: "secondary",
+  reviewed: "secondary",
+  signed: "default",
+  email_prepared: "warning",
+  print_prepared: "warning",
+  submitted: "success",
+  closed: "secondary",
 };
 
 export default function ApplicationDetailPage({
@@ -86,32 +109,60 @@ export default function ApplicationDetailPage({
     }
   }
 
-  if (loading || !user || !application || !vacancy) return null;
+  function sendApplication() {
+    return runAction(async () => {
+      const res = await api.sendApplication(id);
+      setSendResult(res);
+      await refresh();
+    });
+  }
+
+  if (loading || !user) return null;
+
+  if (!application || !vacancy) {
+    return (
+      <AppShell>
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-2/3" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </AppShell>
+    );
+  }
 
   const status = application.status;
 
   return (
     <AppShell>
-      <div className="space-y-6 pb-12">
-        <div className="flex items-center justify-between">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="space-y-6 pb-12"
+      >
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold">{vacancy.jobTitle}</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{vacancy.jobTitle}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               {vacancy.departmentName} · Ref: {vacancy.referenceNumber}
             </p>
           </div>
-          <Badge variant="secondary">{STATUS_LABEL[status] ?? status}</Badge>
+          <Badge variant={STATUS_VARIANT[status] ?? "secondary"} className="shrink-0">
+            {STATUS_LABEL[status] ?? status}
+          </Badge>
         </div>
 
         {match && (
           <p className="text-sm text-muted-foreground">
-            This application was prepared from your profile as it stood when you applied —
-            {match.percentage}% match at that time.
+            This application was prepared from your profile as it stood when you applied — {match.percentage}%
+            match at that time.
           </p>
         )}
 
         {error && (
           <Alert variant="destructive">
+            <WarningCircle weight="fill" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -122,7 +173,7 @@ export default function ApplicationDetailPage({
               <CardTitle className="text-base">Application summary</CardTitle>
               <CardDescription>Frozen at the moment you applied — later profile edits don&apos;t change this.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
+            <CardContent className="space-y-1 text-sm">
               <SummaryRow label="ID number" value={snapshot.snapshotData.profile.idNumber} />
               <SummaryRow label="Contact" value={snapshot.snapshotData.profile.phone} />
               <SummaryRow
@@ -156,6 +207,7 @@ export default function ApplicationDetailPage({
                 }
                 disabled={busy}
               >
+                {busy && <CircleNotch className="size-4 animate-spin" />}
                 Run review
               </Button>
               {review && (
@@ -163,9 +215,9 @@ export default function ApplicationDetailPage({
                   {review.checks.map((c) => (
                     <li key={c.rule} className="flex items-start gap-2">
                       {c.passed ? (
-                        <CheckCircle2 className="size-4 shrink-0 text-success" />
+                        <CheckCircle weight="fill" className="size-4 shrink-0 text-success" />
                       ) : (
-                        <XCircle className="size-4 shrink-0 text-destructive" />
+                        <XCircle weight="fill" className="size-4 shrink-0 text-destructive" />
                       )}
                       <span>{c.passed ? c.rule.replaceAll("_", " ") : c.message}</span>
                     </li>
@@ -184,7 +236,10 @@ export default function ApplicationDetailPage({
             </CardHeader>
             <CardContent>
               {status === "signed" ? (
-                <p className="text-sm text-success">Signed.</p>
+                <p className="flex items-center gap-1.5 text-sm text-success">
+                  <CheckCircle weight="fill" className="size-4" />
+                  Signed.
+                </p>
               ) : (
                 <SignaturePad
                   onCapture={(dataUrl) =>
@@ -243,21 +298,14 @@ export default function ApplicationDetailPage({
 
               {emailPackage && (
                 <Alert>
+                  <PaperPlaneTilt weight="fill" />
                   <AlertTitle>Email prepared — not sent yet</AlertTitle>
                   <AlertDescription className="space-y-2">
                     <p>To: {emailPackage.recipient}</p>
                     <p>Subject: {emailPackage.subject}</p>
                     <p>{emailPackage.attachments.length} attachment(s).</p>
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        runAction(async () => {
-                          const res = await api.sendApplication(id);
-                          setSendResult(res);
-                          await refresh();
-                        })
-                      }
-                    >
+                    <Button disabled={busy} onClick={sendApplication}>
+                      {busy && <CircleNotch className="size-4 animate-spin" />}
                       Send application
                     </Button>
                   </AlertDescription>
@@ -266,20 +314,34 @@ export default function ApplicationDetailPage({
 
               {sendResult && (
                 <Alert variant={sendResult.success ? "success" : "destructive"}>
+                  {sendResult.success ? <CheckCircle weight="fill" /> : <WarningCircle weight="fill" />}
                   <AlertTitle>{sendResult.success ? "Sent" : "Sending failed"}</AlertTitle>
-                  <AlertDescription>
-                    {sendResult.success
-                      ? `Sent to ${sendResult.recipient}.`
-                      : `${sendResult.error ?? "Unknown error."} Nothing was submitted — try again.`}
+                  <AlertDescription className="space-y-2">
+                    <p>
+                      {sendResult.success
+                        ? `Sent to ${sendResult.recipient}.`
+                        : `${sendResult.error ?? "Unknown error."} Nothing was submitted.`}
+                    </p>
+                    {!sendResult.success && (
+                      <Button size="sm" variant="outline" disabled={busy} onClick={sendApplication}>
+                        {busy ? (
+                          <CircleNotch className="size-4 animate-spin" />
+                        ) : (
+                          <ArrowClockwise className="size-4" />
+                        )}
+                        Try again
+                      </Button>
+                    )}
                   </AlertDescription>
                 </Alert>
               )}
 
               {printUrl && (
                 <Alert>
+                  <FileText weight="fill" />
                   <AlertTitle>Print-ready package generated</AlertTitle>
                   <AlertDescription>
-                    <a href={printUrl} target="_blank" rel="noreferrer" className="underline">
+                    <a href={printUrl} target="_blank" rel="noreferrer" className="font-medium text-primary underline underline-offset-4">
                       Open the PDF
                     </a>
                   </AlertDescription>
@@ -296,6 +358,7 @@ export default function ApplicationDetailPage({
                     })
                   }
                 >
+                  {busy && <CircleNotch className="size-4 animate-spin" />}
                   I&apos;ve delivered this — mark as submitted
                 </Button>
               )}
@@ -304,7 +367,8 @@ export default function ApplicationDetailPage({
         )}
 
         {status === "submitted" && (
-          <Alert>
+          <Alert variant="success">
+            <CheckCircle weight="fill" />
             <AlertTitle>Submitted</AlertTitle>
             <AlertDescription>
               This application is marked as submitted. Good luck.
@@ -314,23 +378,30 @@ export default function ApplicationDetailPage({
 
         <Separator />
         <div>
-          <h2 className="mb-2 text-sm font-medium">Attached documents</h2>
-          <ul className="space-y-1 text-sm text-muted-foreground">
-            {documents.map((d) => (
-              <li key={d.id}>{d.documentRole}</li>
-            ))}
-          </ul>
+          <h2 className="mb-3 text-sm font-medium">Attached documents</h2>
+          {documents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No documents attached yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {documents.map((d) => (
+                <li key={d.id} className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                  <FileText className="size-4" />
+                  {d.documentRole.replaceAll("_", " ")}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      </div>
+      </motion.div>
     </AppShell>
   );
 }
 
 function SummaryRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
-    <div className="flex justify-between border-b py-1 last:border-0">
+    <div className="flex justify-between border-b border-border/70 py-1.5 last:border-0">
       <span className="text-muted-foreground">{label}</span>
-      <span>{value || "N/A"}</span>
+      <span className="font-medium">{value || "N/A"}</span>
     </div>
   );
 }

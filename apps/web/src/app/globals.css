@@ -4,56 +4,58 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --foreground: oklch(0.16 0.006 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.16 0.006 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0.02 255);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.6 0.15 145);
-  --success-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.75 0.15 75);
-  --warning-foreground: oklch(0.145 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.16 0.006 260);
+  --primary: oklch(0.42 0.08 185);
+  --primary-hover: oklch(0.36 0.08 185);
+  --primary-foreground: oklch(0.98 0.01 185);
+  --secondary: oklch(0.965 0.003 260);
+  --secondary-foreground: oklch(0.24 0.006 260);
+  --muted: oklch(0.965 0.003 260);
+  --muted-foreground: oklch(0.5 0.008 260);
+  --accent: oklch(0.94 0.03 185);
+  --accent-foreground: oklch(0.3 0.05 185);
+  --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.5 0.11 155);
+  --success-foreground: oklch(0.98 0 0);
+  --warning: oklch(0.65 0.15 75);
+  --warning-foreground: oklch(0.16 0.006 260);
+  --border: oklch(0.9 0.005 260);
+  --input: oklch(0.9 0.005 260);
+  --ring: oklch(0.42 0.08 185 / 45%);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.7 0.15 145);
-  --success-foreground: oklch(0.145 0 0);
-  --warning: oklch(0.8 0.15 75);
-  --warning-foreground: oklch(0.145 0 0);
+  --background: oklch(0.16 0.006 260);
+  --foreground: oklch(0.97 0.003 260);
+  --card: oklch(0.21 0.006 260);
+  --card-foreground: oklch(0.97 0.003 260);
+  --popover: oklch(0.21 0.006 260);
+  --popover-foreground: oklch(0.97 0.003 260);
+  --primary: oklch(0.72 0.1 185);
+  --primary-hover: oklch(0.78 0.1 185);
+  --primary-foreground: oklch(0.16 0.03 185);
+  --secondary: oklch(0.27 0.006 260);
+  --secondary-foreground: oklch(0.97 0.003 260);
+  --muted: oklch(0.27 0.006 260);
+  --muted-foreground: oklch(0.66 0.008 260);
+  --accent: oklch(0.3 0.04 185);
+  --accent-foreground: oklch(0.9 0.03 185);
+  --destructive: oklch(0.65 0.19 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.68 0.12 155);
+  --success-foreground: oklch(0.16 0.006 260);
+  --warning: oklch(0.75 0.14 75);
+  --warning-foreground: oklch(0.16 0.006 260);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.72 0.1 185 / 45%);
 }
 
 @theme inline {
@@ -68,6 +70,7 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -84,7 +87,9 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --font-sans: var(--font-inter);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+  --shadow-soft: 0 1px 2px oklch(0.16 0.006 260 / 4%), 0 12px 24px -12px oklch(0.16 0.006 260 / 10%);
 }
 
 @layer base {
@@ -93,5 +98,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+  }
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight;
   }
 }

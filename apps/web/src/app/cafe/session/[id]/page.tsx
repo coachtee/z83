@@ -3,6 +3,7 @@
 import { Suspense, use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { motion } from "framer-motion";
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/hooks/use-session";
 import { ApiError, api, assistedHeaders } from "@/lib/api";
@@ -14,7 +15,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { AssistedSession, DocumentTypeCode, FullProfile, AppDocument, Vacancy } from "@z83/types";
+import {
+  Briefcase,
+  CheckCircle,
+  CircleNotch,
+  Compass,
+  FileText,
+  GraduationCap,
+  IdentificationCard,
+  Info,
+  UploadSimple,
+  Users,
+  WarningCircle,
+} from "@phosphor-icons/react";
 
 const DRIVERS_LICENCE_CODES = ["A", "A1", "B", "EB", "C1", "C", "EC1", "EC"] as const;
 const DOCUMENT_TYPES: { code: DocumentTypeCode; label: string }[] = [
@@ -93,6 +108,7 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
       <AppShell>
         <div className="mx-auto max-w-md py-8">
           <Alert variant="destructive">
+            <WarningCircle weight="fill" />
             <AlertDescription>
               This session has ended or was never authorized. Staff access to an applicant&apos;s
               information stops the moment a session closes.
@@ -106,13 +122,24 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
     );
   }
 
-  if (!session || !profile) return null;
+  if (!session || !profile) {
+    return (
+      <AppShell>
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-1/2" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+      </AppShell>
+    );
+  }
 
   if (session.status === "pending") {
     return (
       <AppShell>
         <div className="mx-auto max-w-md py-8">
           <Alert>
+            <Info weight="fill" />
             <AlertDescription>
               This session hasn&apos;t been authorized yet. The applicant needs to type their own
               password on the &ldquo;Assist an applicant&rdquo; screen before you can continue.
@@ -231,29 +258,37 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <AppShell>
-      <div className="space-y-6 pb-12">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="space-y-6 pb-12"
+      >
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold">
+            <h1 className="font-display text-xl font-semibold tracking-tight">
               Assisting {applicantEmail ?? p.email ?? "this applicant"}
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-muted-foreground">
               Opened {new Date(session.openedAt).toLocaleString("en-ZA")}. Closing ends your
               access immediately.
             </p>
           </div>
           <Button variant="destructive" onClick={handleClose} disabled={closing}>
+            {closing && <CircleNotch className="size-4 animate-spin" />}
             {closing ? "Closing…" : "Close session"}
           </Button>
         </div>
 
         {error && (
           <Alert variant="destructive">
+            <WarningCircle weight="fill" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
         <Alert>
+          <Info weight="fill" />
           <AlertDescription>
             You can help fill in the profile, upload documents, and find matching vacancies. The
             applicant has to review, sign and submit any application themselves — either now,
@@ -263,6 +298,9 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
 
         <Card>
           <CardHeader>
+            <div className="flex size-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+              <IdentificationCard weight="bold" className="size-4.5" />
+            </div>
             <CardTitle className="text-base">Personal particulars</CardTitle>
             <CardDescription>Only what the applicant tells you — leave the rest blank.</CardDescription>
           </CardHeader>
@@ -294,9 +332,15 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
               </div>
               <div className="flex items-center gap-3">
                 <Button type="submit" disabled={savingPersonal}>
+                  {savingPersonal && <CircleNotch className="size-4 animate-spin" />}
                   {savingPersonal ? "Saving…" : "Save"}
                 </Button>
-                {personalSaved && <span className="text-sm text-success">Saved.</span>}
+                {personalSaved && (
+                  <span className="flex items-center gap-1.5 text-sm text-success">
+                    <CheckCircle weight="fill" className="size-4" />
+                    Saved.
+                  </span>
+                )}
               </div>
             </form>
           </CardContent>
@@ -304,11 +348,14 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
 
         <Card>
           <CardHeader>
+            <div className="flex size-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+              <GraduationCap weight="bold" className="size-4.5" />
+            </div>
             <CardTitle className="text-base">Qualifications</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {profile.qualifications.map((q) => (
-              <div key={q.id} className="rounded-md border p-3 text-sm">
+              <div key={q.id} className="rounded-lg border p-3 text-sm">
                 <p className="font-medium">{q.qualificationName}</p>
                 <p className="text-muted-foreground">
                   {q.institution}
@@ -323,7 +370,7 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
               <Field label="Qualification name" name="qualificationName" required />
               <Field label="NQF level" name="nqfLevel" type="number" />
               <Field label="Year completed" name="yearCompleted" type="number" />
-              <Button type="submit" className="sm:col-span-2 w-fit">
+              <Button type="submit" variant="outline" className="sm:col-span-2 w-fit">
                 Add qualification
               </Button>
             </form>
@@ -332,11 +379,14 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
 
         <Card>
           <CardHeader>
+            <div className="flex size-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+              <Briefcase weight="bold" className="size-4.5" />
+            </div>
             <CardTitle className="text-base">Work experience</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {profile.workExperience.map((w) => (
-              <div key={w.id} className="rounded-md border p-3 text-sm">
+              <div key={w.id} className="rounded-lg border p-3 text-sm">
                 <p className="font-medium">{w.jobTitle}</p>
                 <p className="text-muted-foreground">
                   {w.employer}, {w.startDate} – {w.isCurrent ? "present" : (w.endDate ?? "N/A")}
@@ -351,7 +401,7 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
               <label className="flex items-center gap-2 self-end pb-2 text-sm">
                 <Checkbox name="isCurrent" /> This is their current job
               </label>
-              <Button type="submit" className="sm:col-span-2 w-fit">
+              <Button type="submit" variant="outline" className="sm:col-span-2 w-fit">
                 Add work experience
               </Button>
             </form>
@@ -360,11 +410,14 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
 
         <Card>
           <CardHeader>
+            <div className="flex size-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+              <Users weight="bold" className="size-4.5" />
+            </div>
             <CardTitle className="text-base">References</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {profile.references.map((r) => (
-              <div key={r.id} className="rounded-md border p-3 text-sm">
+              <div key={r.id} className="rounded-lg border p-3 text-sm">
                 <p className="font-medium">{r.fullName}</p>
                 <p className="text-muted-foreground">
                   {[r.organisation, r.phone, r.email].filter(Boolean).join(" · ")}
@@ -377,7 +430,7 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
               <Field label="Organisation" name="organisation" />
               <Field label="Phone" name="phone" />
               <Field label="Email" name="email" type="email" />
-              <Button type="submit" className="sm:col-span-2 w-fit">
+              <Button type="submit" variant="outline" className="sm:col-span-2 w-fit">
                 Add reference
               </Button>
             </form>
@@ -386,6 +439,9 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
 
         <Card>
           <CardHeader>
+            <div className="flex size-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+              <UploadSimple weight="bold" className="size-4.5" />
+            </div>
             <CardTitle className="text-base">Documents</CardTitle>
             <CardDescription>ID, CV, certificates and registrations — stored securely.</CardDescription>
           </CardHeader>
@@ -394,8 +450,11 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
               <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>
             )}
             {documents.map((d) => (
-              <div key={d.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
-                <span>{d.originalFilename}</span>
+              <div key={d.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
+                <span className="flex items-center gap-2">
+                  <FileText className="size-4 text-muted-foreground" />
+                  {d.originalFilename}
+                </span>
                 <span className="text-muted-foreground">{d.documentTypeCode}</span>
               </div>
             ))}
@@ -412,6 +471,9 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
 
         <Card>
           <CardHeader>
+            <div className="flex size-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+              <Compass weight="bold" className="size-4.5" />
+            </div>
             <CardTitle className="text-base">Matching vacancies</CardTitle>
             <CardDescription>
               Based on the profile above. Opening one still shows why it matches, but applying
@@ -426,20 +488,22 @@ function CafeSessionContent({ params }: { params: Promise<{ id: string }> }) {
               <Link
                 key={v.id}
                 href={`/vacancies/${v.id}?assist=${sessionId}`}
-                className="flex items-center justify-between rounded-md border p-3 text-sm hover:bg-accent"
+                className="flex items-center justify-between rounded-lg border p-3 text-sm transition-colors hover:border-primary/30 hover:bg-accent/50"
               >
                 <div>
                   <p className="font-medium">{v.jobTitle}</p>
                   <p className="text-muted-foreground">{v.departmentName}</p>
                 </div>
                 {v.matchPercentage !== null && (
-                  <Badge variant="secondary">{v.matchPercentage}% match</Badge>
+                  <Badge variant={v.matchPercentage >= 50 ? "success" : "secondary"}>
+                    {v.matchPercentage}% match
+                  </Badge>
                 )}
               </Link>
             ))}
           </CardContent>
         </Card>
-      </div>
+      </motion.div>
     </AppShell>
   );
 }

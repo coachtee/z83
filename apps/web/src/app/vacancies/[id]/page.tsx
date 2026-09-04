@@ -3,16 +3,27 @@
 import { Suspense, use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { motion } from "framer-motion";
 import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/hooks/use-session";
 import { ApiError, api, assistedHeaders } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { MatchResult, Vacancy, VacancyRequirement } from "@z83/types";
-import { CheckCircle2, HelpCircle, XCircle } from "lucide-react";
+import {
+  Buildings,
+  CalendarBlank,
+  CheckCircle,
+  CircleNotch,
+  Info,
+  MapPin,
+  Question,
+  WarningCircle,
+  XCircle,
+} from "@phosphor-icons/react";
 
 export default function VacancyDetailPage(props: { params: Promise<{ id: string }> }) {
   return (
@@ -64,24 +75,48 @@ function VacancyDetailContent({
     }
   }
 
-  if (!vacancy) return null;
+  if (!vacancy) {
+    return (
+      <AppShell>
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-2/3" />
+          <Skeleton className="h-4 w-1/3" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-xl font-semibold">{vacancy.jobTitle}</h1>
-          <p className="text-sm text-muted-foreground">
-            {vacancy.departmentName} · {vacancy.province ?? "N/A"}
-          </p>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="space-y-6 pb-24"
+      >
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{vacancy.jobTitle}</h1>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Buildings className="size-4" />
+              {vacancy.departmentName}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <MapPin className="size-4" />
+              {vacancy.province ?? "N/A"}
+            </span>
+            {vacancy.closingAt && (
+              <span className="flex items-center gap-1.5">
+                <CalendarBlank className="size-4" />
+                Closes {new Date(vacancy.closingAt).toLocaleDateString("en-ZA")}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">
             Ref: {vacancy.referenceNumber} · Salary: {vacancy.salaryText ?? "N/A"}
           </p>
-          {vacancy.closingAt && (
-            <p className="text-xs text-muted-foreground">
-              Closes {new Date(vacancy.closingAt).toLocaleDateString("en-ZA")}
-            </p>
-          )}
         </div>
 
         {match ? (
@@ -90,27 +125,30 @@ function VacancyDetailContent({
               <CardTitle className="text-base">Why this matches</CardTitle>
               <CardDescription>{match.disclaimer}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
               <div className="flex items-center gap-3">
                 <Progress value={match.percentage} className="flex-1" />
-                <Badge variant="secondary">{match.percentage}%</Badge>
+                <span className="font-display text-base font-semibold text-primary">
+                  {match.percentage}%
+                </span>
               </div>
               <RequirementList
                 items={match.matched.map((m) => m.description)}
-                icon={<CheckCircle2 className="size-4 text-success" />}
+                icon={<CheckCircle weight="fill" className="size-4 shrink-0 text-success" />}
               />
               <RequirementList
                 items={match.missing.map((m) => m.description)}
-                icon={<XCircle className="size-4 text-destructive" />}
+                icon={<XCircle weight="fill" className="size-4 shrink-0 text-destructive" />}
               />
               <RequirementList
                 items={match.unknown.map((m) => `${m.description} (${m.reason})`)}
-                icon={<HelpCircle className="size-4 text-warning" />}
+                icon={<Question weight="fill" className="size-4 shrink-0 text-warning" />}
               />
             </CardContent>
           </Card>
         ) : (
           <Alert>
+            <Info weight="fill" />
             <AlertDescription>
               Sign in to see how your profile matches this vacancy&apos;s requirements.
             </AlertDescription>
@@ -122,9 +160,12 @@ function VacancyDetailContent({
             <CardTitle className="text-base">Requirements as published</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="list-disc space-y-1 pl-5 text-sm">
+            <ul className="space-y-2 text-sm">
               {requirements.map((r) => (
-                <li key={r.id}>{r.description}</li>
+                <li key={r.id} className="flex items-start gap-2">
+                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
+                  {r.description}
+                </li>
               ))}
             </ul>
           </CardContent>
@@ -132,6 +173,7 @@ function VacancyDetailContent({
 
         {error && (
           <Alert variant="destructive">
+            <WarningCircle weight="fill" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -139,6 +181,7 @@ function VacancyDetailContent({
         {assistSessionId ? (
           <div className="space-y-3">
             <Alert>
+              <Info weight="fill" />
               <AlertDescription>
                 Applying needs the applicant&apos;s own sign-in — it isn&apos;t something staff can
                 do on their behalf. Once they&apos;re ready, they can apply themselves on this
@@ -151,10 +194,11 @@ function VacancyDetailContent({
           </div>
         ) : (
           <Button size="lg" onClick={handleApply} disabled={applying}>
+            {applying && <CircleNotch className="size-4 animate-spin" />}
             {applying ? "Preparing…" : "Apply"}
           </Button>
         )}
-      </div>
+      </motion.div>
     </AppShell>
   );
 }
